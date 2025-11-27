@@ -1,5 +1,5 @@
-function const = get_constants()
-    % GET_CONSTANTS Database of physics and project parameters.
+function const = lib_constants()
+    % LIB_CONSTANTS Database of physics and project parameters.
     % Frame Definition: Sun-Centered EMO2000.
     
     %% 1. Time and Math
@@ -56,19 +56,11 @@ function const = get_constants()
     % GST at J2000 (for rotation calculation)
     const.phi_G_J2000 = 280.46061837 * const.deg2rad;
     
-    %% 8. Maneuvers 
-    % This is the section that was causing your error
-    
-    % Lunar Targeting Maneuver (LTM)
+    %% 6. Maneuvers 
+    % LTM
     const.LTM.date_utc = '2025 DEC 16 00:00:00.00';
-    % Delta-V in EMO2000 (km/s)
-    const.LTM.dV = [0.6931075; -0.8462091; 0.0956979]; 
-    % Execution Error (1-sigma spherical)
-    const.LTM.sigma_exec = 5e-3; % km/s (5 m/s)
+    const.LTM.dV = [0.6931075; -0.8462091; 0.0956979]; % km/s in EMO2000
     
-    % Lunar Cleanup Maneuver (LCM)
+    % LCM
     const.LCM.date_utc = '2025 DEC 25 00:00:00.00';
-    
-    % Delta-V Budget
-    const.dV_budget = 1.139; % km/s (1139 m/s)
 end
