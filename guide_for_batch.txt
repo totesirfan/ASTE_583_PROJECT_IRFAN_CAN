@@ -1,0 +1,101 @@
+ASTE 583: PROJECT CODEBASE GUIDE
+Target Audience: Can (Batch Filter Lead) & Irfan (GNC/OD Lead)
+Date: Fall 2025
+
+========================================================================
+1. QUICK START
+========================================================================
+1. OPEN MATLAB in the project root folder.
+2. RUN 'init_project.m' immediately. 
+   - This loads the MICE toolkit and SPICE kernels.
+   - If this fails, check the paths in 'init_project.m'.
+3. RUN 'Phase1_Test_Integrity.m'.
+   - If this passes, the physics engine and math libraries are working.
+
+========================================================================
+2. ARCHITECTURE OVERVIEW
+========================================================================
+The code is organized into "Libraries" (Core Logic) and "Phases" (Execution).
+
+[LIBRARIES] - Do not edit unless fixing a bug
+1. lib_constants.m     : The database. Returns 'const' struct.
+2. lib_dynamics.m      : The physics engine (Sun + Earth + SRP).
+3. lib_measurements.m  : The geometry engine (Range/Doppler + Partials).
+
+[PHASE 1] - Reference Trajectory (Complete)
+- Phase1_Test_Integrity.m
+- Phase1_Main_RefTraj.m
+
+[PHASE 2] - Orbit Determination (In Progress)
+- Phase2_Load_Data.m      : Parses CSV files into 'obs_data.mat'.
+- Phase2_Batch_Filter.m   : The Batch Least Squares estimator.
+
+========================================================================
+3. LIBRARY GUIDE (API REFERENCE)
+========================================================================
+
+A. lib_dynamics(t, X, const)
+------------------------------------------------------------------------
+Usage: dX = lib_dynamics(t, X, const);
+Input:
+  - t : Ephemeris Time (seconds past J2000).
+  - X : Augmented State Vector. 
+        * Phase 2/3 State (10x1): [r(3); v(3); k_SRP(1); bias(1); lat(1); lon(1)]
+Output:
+  - dX : State derivative. Parameters (k_SRP, bias, lat, lon) have 0 derivative.
+
+B. lib_measurements(t, X, station_id, const)
+------------------------------------------------------------------------
+Usage: [Y_comp, H] = lib_measurements(t, X, station_id, const);
+Input:
+  - X : Must be the full 10x1 state vector for Phase 2 estimation.
+Output:
+  - Y_comp : [Range; RangeRate] (2x1).
+  - H      : Measurement Partial Matrix (2x10).
+             Includes partials for Station Latitude/Longitude if station_id == 4.
+
+*AUTOMATIC FEATURES:*
+1. Bias Switch: The function automatically applies the Range-Rate bias 
+   logic (ON if t < 6 days, OFF if t >= 6 days).
+2. Station Estimation: If you pass a 10-element state and station_id=4, 
+   it automatically calculates the partials for the station coordinates.
+
+========================================================================
+4. COORDINATE FRAME STANDARDS
+========================================================================
+Everything is standardized to: **Sun-Centered Mean Orbit J2000 (EMO2000)**
+- Do not manually rotate Earth/Sun vectors; the libraries handle it.
+- When plotting, remember to subtract Earth's position to get a Geocentric view.
+
+========================================================================
+5. GUIDE FOR CAN (BATCH FILTER IMPLEMENTATION)
+========================================================================
+To build 'Phase2_Batch_Filter.m', follow this workflow:
+
+1. STATE VECTOR DEFINITION (10x1):
+   X = [rx; ry; rz; vx; vy; vz; k_SRP; bias; lat_ant; lon_ant]
+   
+   * Initial Guess (X_ref):
+     - r, v    : From lib_constants (X0_ref)
+     - k_SRP   : 1.0
+     - bias    : 0.0
+     - lat_ant : const.stations(4).lat
+     - lon_ant : const.stations(4).lon
+
+2. THE BATCH LOOP:
+   - Initialize P0 (Covariance) 10x10 with appropriate sigmas.
+   - Loop (Iterations):
+       - Initialize Lambda (10x10) and N (10x1) to zero (or include a priori).
+       - Loop through measurements (k = 1:M):
+           * Propagate X_ref to t_k using ode45(@lib_dynamics).
+           * Calculate residuals: y_res = y_obs - lib_measurements(X_k).
+           * Get H-matrix: [~, H] = lib_measurements(X_k).
+           * Accumulate: Lambda += H'*R_inv*H, N += H'*R_inv*y_res.
+       - Solve: del_x = Lambda \ N
+       - Update: X_ref = X_ref + del_x
+       - Check convergence (norm(del_x) < tolerance).
+
+3. IMPORTANT TIPS:
+   - Range data is invalid (0) for the first 6 days. Check `if y_obs(1) == 0` 
+     and set its weight to 0 (or remove that row from H and y).
+   - Use `Phase2_Load_Data` to get the measurements struct.
