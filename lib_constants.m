@@ -67,7 +67,7 @@ function const = lib_constants()
     const.LCM.date_utc = '2025 DEC 25 00:00:00.00';
     const.dV_budget = 1.139; % km/s (1139 m/s)
 
-    [cite_start]%% 7. Initial Covariance (State Only) [cite: 4114]
+    %% 7. Initial Covariance (State Only) 
     % 1-sigma values for Spacecraft State
     sigma_r = 100;   % km
     sigma_v = 1e-3;  % km/s (1 m/s)
