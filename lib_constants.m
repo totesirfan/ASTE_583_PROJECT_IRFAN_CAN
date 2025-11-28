@@ -63,4 +63,19 @@ function const = lib_constants()
     
     % LCM
     const.LCM.date_utc = '2025 DEC 25 00:00:00.00';
+    %% 9. Filter Initialization (Phase 2)
+    % A priori uncertainties for the Augmented State (10x1)
+    % [r(3); v(3); k_SRP(1); bias(1); lat(1); lon(1)]
+    
+    sigma_kSRP = 1/3;        % 3-sigma = 100%
+    sigma_bias = 1.0;        % km/s (Large uncertainty)
+    sigma_stat = 1 * const.deg2rad; % ~110 km uncertainty for station
+    
+    % Full 10x10 P0 Matrix
+    const.P0_aug = blkdiag(const.P0_state, ...
+                           sigma_kSRP^2, ...
+                           sigma_bias^2, ...
+                           sigma_stat^2, ...
+                           sigma_stat^2);
+
 end
