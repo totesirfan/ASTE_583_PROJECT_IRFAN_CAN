@@ -60,22 +60,34 @@ function const = lib_constants()
     % LTM
     const.LTM.date_utc = '2025 DEC 16 00:00:00.00';
     const.LTM.dV = [0.6931075; -0.8462091; 0.0956979]; % km/s in EMO2000
+    % Execution Error (1-sigma spherical)
+    const.LTM.sigma_exec = 5e-3; % km/s (5 m/s)
     
     % LCM
     const.LCM.date_utc = '2025 DEC 25 00:00:00.00';
-    %% 9. Filter Initialization (Phase 2)
+    const.dV_budget = 1.139; % km/s (1139 m/s)
+
+    [cite_start]%% 7. Initial Covariance (State Only) [cite: 4114]
+    % 1-sigma values for Spacecraft State
+    sigma_r = 100;   % km
+    sigma_v = 1e-3;  % km/s (1 m/s)
+    
+    % P0 Matrix (6x6 for state) - Diagonal
+    const.P0_state = diag([sigma_r^2 * ones(3,1); sigma_v^2 * ones(3,1)]);
+
+    %% 8. Filter Initialization (Augmented State for Phase 2/3)
     % A priori uncertainties for the Augmented State (10x1)
     % [r(3); v(3); k_SRP(1); bias(1); lat(1); lon(1)]
     
     sigma_kSRP = 1/3;        % 3-sigma = 100%
-    sigma_bias = 1.0;        % km/s (Large uncertainty)
-    sigma_stat = 1 * const.deg2rad; % ~110 km uncertainty for station
+    sigma_bias = 1.0;        % km/s (Large uncertainty for unknown bias)
+    sigma_stat = 1 * const.deg2rad; % ~110 km uncertainty for Station 4
     
     % Full 10x10 P0 Matrix
+    % Used for initializing the Batch/EKF filters
     const.P0_aug = blkdiag(const.P0_state, ...
                            sigma_kSRP^2, ...
                            sigma_bias^2, ...
                            sigma_stat^2, ...
                            sigma_stat^2);
-
 end
