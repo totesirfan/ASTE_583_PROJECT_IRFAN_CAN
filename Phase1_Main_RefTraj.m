@@ -8,27 +8,21 @@
 clear; clc; close all;
 
 %% 1. Setup & Constants
-% Using NEW naming scheme
+init_project();
 const = lib_constants();
 
-% Ensure kernels are loaded
-try
-    t0 = cspice_str2et(const.epoch_utc_str);
-catch
-    init_project();
-    t0 = cspice_str2et(const.epoch_utc_str);
-end
+t0 = cspice_str2et(const.epoch_utc_str);
 
 % Time Definitions
 t_LTM = cspice_str2et(const.LTM.date_utc);
 tf    = t0 + (251 * const.day2sec);
 
 %% 2. Propagation (Sun-Centered EMO2000)
-X0 = [const.X0_ref; const.k_SRP_0; 0];
+% State: [r(3); v(3); k_SRP(1); bias(1)]
+X0 = [const.X0_ref; 1.0; 0.0];
 options = odeset('RelTol', 1e-12, 'AbsTol', 1e-12);
 
 fprintf('1/4 Propagating Segment 1 (Detection -> LTM)...\n');
-% Using NEW library name: lib_dynamics
 [T1, X1] = ode45(@(t,x) lib_dynamics(t, x, const), [t0 t_LTM], X0, options);
 
 % Apply LTM Maneuver
@@ -64,7 +58,6 @@ for i = 1:n_steps
     r_earth_sun(i, :) = r_E_Sun_EMO';
     
     % B. Spacecraft w.r.t Earth (EMO2000)
-    % r_sc_earth = r_sc_sun - r_earth_sun
     r_sc_earth_emo = r_sc_now - r_E_Sun_EMO;
     r_sc_earth(i, :) = r_sc_earth_emo';
     
@@ -79,8 +72,8 @@ for i = 1:n_steps
     r_sc_eci = const.R_EME_EMO' * r_sc_earth_emo;
     
     % 2. Rotate ECI -> ECF (Body Fixed)
-    % GST Calculation relative to J2000 epoch
-    phi_G = const.phi_G_J2000 + const.we * t;
+    % FIX: Use Updated GST Calculation relative to Detection Epoch
+    phi_G = const.phi_G_detect + const.we * (t - const.t_detect_et);
     
     R_ECI_ECF = [cos(phi_G), sin(phi_G), 0;
                 -sin(phi_G), cos(phi_G), 0;
@@ -173,4 +166,4 @@ text(lons(ltm_idx)+3, lats(ltm_idx), 'LTM', 'Color', 'r', 'FontWeight', 'bold');
 
 xlim([-180 180]); ylim([-90 90]);
 xlabel('Longitude (deg)'); ylabel('Latitude (deg)');
-title('Lunar Trailblazer Ground Track (Reference)');
+title('Lunar Trailblazer Ground Track (Reference - Updated Earth Rotation)');

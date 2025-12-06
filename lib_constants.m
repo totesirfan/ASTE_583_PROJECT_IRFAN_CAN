@@ -50,11 +50,18 @@ function const = lib_constants()
     const.stations(4).lat = -80 * const.deg2rad;        
     const.stations(4).lon = 0 * const.deg2rad;
 
-    % Initial Epoch String
+    % --- TIME SYSTEM & EARTH ROTATION ---
     const.epoch_utc_str = '2025 DEC 01 00:00:00.00';
     
-    % GST at J2000 (for rotation calculation)
-    const.phi_G_J2000 = 280.46061837 * const.deg2rad;
+    % Handout Specific: GST at Detection Epoch is 00:10:43
+    % This replaces the standard J2000 definition for this project.
+    
+    % 1. Exact Epoch in ET seconds (Calculated via cspice_str2et previously)
+    const.t_detect_et = 817819269.183122; 
+    
+    % 2. GST Angle at Epoch (0 deg, 10 min, 43 sec)
+    gst_deg = 0 + 10/60 + 43/3600; 
+    const.phi_G_detect = gst_deg * const.deg2rad;
     
     %% 6. Maneuvers 
     % LTM
@@ -68,23 +75,15 @@ function const = lib_constants()
     const.dV_budget = 1.139; % km/s (1139 m/s)
 
     %% 7. Initial Covariance (State Only) 
-    % 1-sigma values for Spacecraft State
     sigma_r = 100;   % km
-    sigma_v = 1e-3;  % km/s (1 m/s)
-    
-    % P0 Matrix (6x6 for state) - Diagonal
+    sigma_v = 1e-3;  % km/s
     const.P0_state = diag([sigma_r^2 * ones(3,1); sigma_v^2 * ones(3,1)]);
 
-    %% 8. Filter Initialization (Augmented State for Phase 2/3)
-    % A priori uncertainties for the Augmented State (10x1)
-    % [r(3); v(3); k_SRP(1); bias(1); lat(1); lon(1)]
+    %% 8. Filter Initialization (Augmented)
+    sigma_kSRP = 1/3;        
+    sigma_bias = 1.0;        
+    sigma_stat = 1 * const.deg2rad; 
     
-    sigma_kSRP = 1/3;        % 3-sigma = 100%
-    sigma_bias = 1.0;        % km/s (Large uncertainty for unknown bias)
-    sigma_stat = 1 * const.deg2rad; % ~110 km uncertainty for Station 4
-    
-    % Full 10x10 P0 Matrix
-    % Used for initializing the Batch/EKF filters
     const.P0_aug = blkdiag(const.P0_state, ...
                            sigma_kSRP^2, ...
                            sigma_bias^2, ...
