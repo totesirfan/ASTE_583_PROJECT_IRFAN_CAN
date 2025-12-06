@@ -1,4 +1,4 @@
-% Phase2_Prelim_Kalman_Debug.m
+% Phase2_Prelim_Kalman_.m
 % Preliminary Sequential Kalman Filter (CKF-style) for 0–6 days of data.
 % Includes DEBUG printing so you can monitor progress.
 
