@@ -1,8 +1,22 @@
 # 🚀 USC ASTE 583 Project – Lunar Trailblazer Navigation
+## Visualizations
 
-**Repository:** `totesirfan-aste_583_project_irfan_can`  
-**Course:** ASTE 583 – Space Navigation Principles and Practice  
-**Group Members:** Irfan & Can
+### Reference Trajectory
+
+| Heliocentric Transfer | Geocentric Lunar Flyby |
+| :---: | :---: |
+| <img src="img/heliocentric.png" width="100%"> | <img src="img/geocentric_view.png" width="100%"> |
+| *Sun-centered view of the transfer orbit* | *Earth-centered view showing lunar flyby geometry* |
+
+### Ground Track
+
+<div align="center">
+  <img src="img/ground_track.png" width="100%">
+  <br>
+  <em>Global ground track showing DSN station visibility and maneuver epochs.</em>
+</div>
+
+---
 
 This repository implements the full Orbit Determination (OD) and maneuver analysis pipeline for the **Lunar Trailblazer** class project. It adheres strictly to:
 
