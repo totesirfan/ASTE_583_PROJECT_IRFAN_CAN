@@ -153,7 +153,7 @@ for k = 1:n_meas
     deltaX_prev = deltaX_k;
     P_prev      = P_k;
 
-    if mod(k,15965) == 0
+    if mod(k,10000) == 0
         fprintf('[%5d/%5d] t=%.3f d, st=%d  pre=%+9.3e  post=%+9.3e\n', ...
             k, n_meas, time_days(k), st, prefit_rr(k), postfit_rr(k));
     end

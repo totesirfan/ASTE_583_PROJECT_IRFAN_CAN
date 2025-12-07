@@ -6,12 +6,18 @@ function Phase2_FinalKalman_PostProcess()
     clear; clc; close all;
     fprintf('=== FINAL KALMAN POST-PROCESS (Residuals + LTM RTN Covariance) ===\n');
 
-    % 1. Setup
+    %%Adjustable y-limits 
+    rr_prefit_ylim  = [-5 5];      
+    rr_postfit_ylim = [-5 5];      
+    rho_prefit_ylim = [];      
+    rho_postfit_ylim= [];      
+
+    %% 1. Setup
     try, init_project(); catch, end
     const = lib_constants();
     t0_et = const.t_detect_et;
 
-    % 2. Load FINAL CKF file
+    %% 2. Load FINAL CKF file
     fname = 'ASTE583_FinalKalman_Results.mat';
     if ~isfile(fname)
         error('File %s not found. Run Phase2_Final_Kalman first.', fname);
@@ -36,14 +42,15 @@ function Phase2_FinalKalman_PostProcess()
     fprintf('Loaded FINAL CKF: %d measurements, span %.3f days.\n', ...
             n_meas, max(t_days));
 
+    station_ids   = 1:4;
+    station_names = {const.stations.name};
+    colors        = lines(4);
+
     %% 3. Range-rate residuals (mm/s), per station
 
     fprintf('Plotting range-rate residuals...\n');
-    figure('Name','FINAL Kalman RR Residuals','Color','w','Position',[100 100 1000 600]);
-
-    colors        = lines(4);
-    station_ids   = 1:4;
-    station_names = {const.stations.name};
+    figure('Name','FINAL Kalman RR Residuals', ...
+           'Color','w','Position',[100 100 1000 600]);
 
     % Prefit
     subplot(2,1,1); hold on; grid on;
@@ -60,6 +67,9 @@ function Phase2_FinalKalman_PostProcess()
     ylabel('RR Prefit (mm/s)');
     title('FINAL Kalman: Range-Rate Prefit Residuals');
     legend(station_names{:}, 'Location','bestoutside');
+    if ~isempty(rr_prefit_ylim)
+        ylim(rr_prefit_ylim);
+    end
 
     % Postfit
     subplot(2,1,2); hold on; grid on;
@@ -75,13 +85,17 @@ function Phase2_FinalKalman_PostProcess()
     xlabel('Time since detection (days)');
     ylabel('RR Postfit (mm/s)');
     title('FINAL Kalman: Range-Rate Postfit Residuals');
+    if ~isempty(rr_postfit_ylim)
+        ylim(rr_postfit_ylim);
+    end
 
     %% 4. Range residuals (km), only where range exists
 
     fprintf('Plotting range residuals...\n');
     hasR = has_range & ~isnan(rho_prefit);
 
-    figure('Name','FINAL Kalman Range Residuals','Color','w','Position',[150 150 1000 600]);
+    figure('Name','FINAL Kalman Range Residuals', ...
+           'Color','w','Position',[150 150 1000 600]);
 
     % Prefit
     subplot(2,1,1); hold on; grid on;
@@ -98,6 +112,9 @@ function Phase2_FinalKalman_PostProcess()
     ylabel('Range Prefit (km)');
     title('FINAL Kalman: Range Prefit Residuals');
     legend(station_names{:}, 'Location','bestoutside');
+    if ~isempty(rho_prefit_ylim)
+        ylim(rho_prefit_ylim);
+    end
 
     % Postfit
     subplot(2,1,2); hold on; grid on;
@@ -113,6 +130,9 @@ function Phase2_FinalKalman_PostProcess()
     xlabel('Time since detection (days)');
     ylabel('Range Postfit (km)');
     title('FINAL Kalman: Range Postfit Residuals');
+    if ~isempty(rho_postfit_ylim)
+        ylim(rho_postfit_ylim);
+    end
 
     %% 5. Covariance propagation to LTM and RTN sigmas
 
@@ -131,8 +151,8 @@ function Phase2_FinalKalman_PostProcess()
     X_LTM   = Z_LTM(1:n_state);
     Phi_LTM = reshape(Z_LTM(n_state+1:end), n_state, n_state);
 
-    P_LTM = Phi_LTM * P0_final_kalman * Phi_LTM.';   % 10x10
-    P_LTM_state = P_LTM(1:6,1:6);                    % r,v block
+    P_LTM       = Phi_LTM * P0_final_kalman * Phi_LTM.';   % 10x10
+    P_LTM_state = P_LTM(1:6,1:6);                          % r,v block
 
     r = X_LTM(1:3);
     v = X_LTM(4:6);

@@ -241,7 +241,7 @@ fprintf('rho_dot_bias: %.6e km/s (%.3f mm/s)\n', ...
 fprintf('lat_4 (deg):  %.6f\n', X0_est_final(9)*C.rad2deg);
 fprintf('lon_4 (deg):  %.6f\n', X0_est_final(10)*C.rad2deg);
 
-%% 7. Save for final batch / Kalman
+%% 7. Save
 prelim_results = struct();
 prelim_results.X0_prior         = X0_prior;
 prelim_results.P0_prior         = P0_est;

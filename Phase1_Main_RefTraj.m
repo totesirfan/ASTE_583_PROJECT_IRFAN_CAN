@@ -3,6 +3,10 @@
 
 clear; clc; close all;
 
+%% User-adjustable time steps
+dt_state_sec = 10;    % [s] output step for state history (e.g. 900 s = 15 min)
+dt_track_sec = 600;   % [s] ground-track sampling step (30 min)
+
 %% 1. Setup & propagation
 init_project();
 const = lib_constants();
@@ -15,22 +19,33 @@ opts  = odeset('RelTol',1e-12,'AbsTol',1e-12);
 
 fprintf('1/4 Propagating (Detection -> LTM -> Flyby)...\n');
 
+% Build output grids for ode45
+t1_grid = (t0:dt_state_sec:t_LTM).';
+if t1_grid(end) < t_LTM
+    t1_grid(end+1,1) = t_LTM;
+end
+
+t2_grid = (t_LTM:dt_state_sec:tf).';
+if t2_grid(end) < tf
+    t2_grid(end+1,1) = tf;
+end
+
 % Segment 1: detection -> LTM (state: [r; v; k_SRP; bias])
-X0_ref = [const.X0_ref; 1; 0];
-[T1, X1] = ode45(@(t,x) lib_dynamics(t,x,const), [t0 t_LTM], X0_ref, opts);
+X0_ref = [const.X0_ref; 1; 0];  % [r; v; k_SRP; bias]
+[T1, X1] = ode45(@(t,x) lib_dynamics(t,x,const), t1_grid, X0_ref, opts);
 
 % Apply LTM dV at LTM epoch
 X_LTM = X1(end,:)';
 X_LTM(4:6) = X_LTM(4:6) + const.LTM.dV(:);
 fprintf('    * LTM ΔV applied: [%.4f, %.4f, %.4f] km/s\n', const.LTM.dV);
 
-% Segment 2: LTM -> flyby
-[T2, X2] = ode45(@(t,x) lib_dynamics(t,x,const), [t_LTM tf], X_LTM, opts);
+% Segment 2: LTM -> tf
+[T2, X2] = ode45(@(t,x) lib_dynamics(t,x,const), t2_grid, X_LTM, opts);
 
 % Concatenate time & state history (Sun-centered EMO2000)
-T_vec     = [T1; T2];              % ET times
-X_sc_sun  = [X1; X2];              % [r_sc_sun; v_sc_sun; params]
-ltm_idx   = numel(T1);             % index of LTM in concatenated arrays
+T_vec    = [T1; T2];   % ET times, user-controlled spacing
+X_sc_sun = [X1; X2];   % [r_sc_sun; v_sc_sun; params]
+ltm_idx  = numel(T1);  % index of LTM in concatenated arrays
 
 %% 2. Coordinate transformations (Earth/Moon, ground track)
 fprintf('2/4 Processing coordinates...\n');
@@ -62,21 +77,19 @@ lons = lons*const.rad2deg;
 lats = lats*const.rad2deg;
 
 % Moon closest approach (geocentric)
-d_vec    = r_sc_earth - r_moon_EMO;
-dist     = sqrt(sum(d_vec.^2,2));
+d_vec          = r_sc_earth - r_moon_EMO;
+dist           = sqrt(sum(d_vec.^2,2));
 [min_dist, idx_ca] = min(dist);
-utc_ca   = cspice_et2utc(T_vec(idx_ca), 'C', 3);
+utc_ca         = cspice_et2utc(T_vec(idx_ca), 'C', 3);
 
-%% 3. 30-min ground-track sampling (fix interp1 duplicates)
-fprintf('3/4 Sampling ground track every 30 minutes...\n');
+%% 3. Ground-track sampling (using dt_track_sec)
+fprintf('3/4 Sampling ground track every %.1f minutes...\n', dt_track_sec/60);
 
-dt_30  = 1800;   % seconds
 [T_unique, ia] = unique(T_vec,'stable');   % enforce unique sample points
+lons_u         = lons(ia);
+lats_u         = lats(ia);
 
-lons_u = lons(ia);
-lats_u = lats(ia);
-
-T_30    = (T_unique(1):dt_30:T_unique(end)).';           % ET grid every 30 min
+T_30    = (T_unique(1):dt_track_sec:T_unique(end)).';    % ET grid
 lons_30 = interp1(T_unique, lons_u, T_30, 'linear');     % deg
 lats_30 = interp1(T_unique, lats_u, T_30, 'linear');     % deg
 days_30 = (T_30 - t0)/const.day2sec;                     % days since detection
@@ -123,7 +136,7 @@ plot([r_sc_earth(idx_ca,1) r_moon_EMO(idx_ca,1)], ...
 xlim([-4.5e5 4.5e5]); ylim([-4.5e5 4.5e5]);
 legend('Location','northeast');
 
-%% FIG 3 – Ground track (30-min samples)
+%% FIG 3 – Ground track (dt_track_sec samples)
 figure('Name','Ground Track','Color','w','Position',[100 100 1000 600]);
 ax = axes; hold on;
 
@@ -138,8 +151,8 @@ end
 n_c = 256;
 cmap_cust = [linspace(0,1,n_c)', zeros(n_c,1), linspace(1,0,n_c)'];
 
-% 30-min ground-track points
-scatter(lons_30, lats_30, 1.5, days_30, 'filled', 'DisplayName','Ground Track (30 min)');
+% Ground-track points
+scatter(lons_30, lats_30, 1, days_30, 'filled', 'DisplayName','Ground Track');
 colormap(ax,cmap_cust);
 cb = colorbar; cb.Label.String = 'Days Since Detection';
 
@@ -169,7 +182,7 @@ end
 set(gca,'YDir','normal');
 xlim([-180 180]); ylim([-90 90]);
 xlabel('Longitude (deg)'); ylabel('Latitude (deg)');
-title('Lunar Trailblazer Ground Track (30-min Samples)');
+title(sprintf('Lunar Trailblazer Ground Track (%.1f min Samples)', dt_track_sec/60));
 grid on;
 
 %% Stats
