@@ -5,7 +5,7 @@
 
 | Heliocentric Transfer | Geocentric Lunar Flyby |
 | :---: | :---: |
-| <img src="img/heliocentric.png" width="100%"> | <img src="img/geocentric_view2.png" width="100%"> |
+| <img src="img/heliocentric.png" width="100%"> | <img src="img/geocentric_view.png" width="100%"> |
 | *Sun-centered view of the transfer orbit* | *Earth-centered view showing lunar flyby geometry* |
 
 ### Ground Track
