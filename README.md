@@ -154,8 +154,6 @@ Phase3_LTM_ManeuverExecution_Final;   % LTM RR signature (defined in Phase3_Mane
 ---
 
 ## 6. Implementation Notes
-- **Function Names:** - `Phase3_CleanupStats.m` defines the function `Phase2_Cleanup_Statistics()`.
-    - `Phase3_ManeuverExecution.m` defines the function `Phase3_LTM_ManeuverExecution_Final()`.
 - **Integrator:** `ode45` is used with tight tolerances (`RelTol ~ 1e-10`, `AbsTol ~ 1e-9`) for numerical stability.
 - **RNG:** Monte Carlo simulations use `rng(583)` for reproducibility.
 
