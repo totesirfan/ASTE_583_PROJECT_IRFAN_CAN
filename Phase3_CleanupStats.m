@@ -1,4 +1,4 @@
-function Phase2_Cleanup_Statistics()
+function Phase3_CleanupStats()
 % PHASE2_CLEANUP_STATISTICS
 % Cleanup Maneuver Statistics (20 pts) using FINAL Kalman OD.
 %
@@ -99,7 +99,7 @@ tic
     end
 
     %% 5. Monte Carlo setup
-    Nmc = 10000;
+    Nmc = 1000;
     rng(583);  % reproducible
 
     % Cholesky factor of posterior covariance

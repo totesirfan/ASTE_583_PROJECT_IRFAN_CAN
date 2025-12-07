@@ -1,4 +1,4 @@
-function Phase3_LTM_ManeuverExecution_Final()
+function Phase3_ManeuverExecution()
 % Predict RR signature of the LTM maneuver using FINAL 10-state Kalman OD.
 % - Propagate no-LTM and LTM trajectories
 % - For each station: compute RR_noLTM, RR_LTM, dRR = RR_LTM - RR_noLTM
