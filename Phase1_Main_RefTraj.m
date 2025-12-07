@@ -4,7 +4,7 @@
 clear; clc; close all;
 
 %% User-adjustable time steps
-dt_state_sec = 10;    % [s] output step for state history (e.g. 900 s = 15 min)
+dt_state_sec = 10;    % [s] output step for state history
 dt_track_sec = 600;   % [s] ground-track sampling step (30 min)
 
 %% 1. Setup & propagation
@@ -77,10 +77,10 @@ lons = lons*const.rad2deg;
 lats = lats*const.rad2deg;
 
 % Moon closest approach (geocentric)
-d_vec          = r_sc_earth - r_moon_EMO;
-dist           = sqrt(sum(d_vec.^2,2));
+d_vec              = r_sc_earth - r_moon_EMO;
+dist               = sqrt(sum(d_vec.^2,2));
 [min_dist, idx_ca] = min(dist);
-utc_ca         = cspice_et2utc(T_vec(idx_ca), 'C', 3);
+utc_ca             = cspice_et2utc(T_vec(idx_ca), 'C', 3);
 
 %% 3. Ground-track sampling (using dt_track_sec)
 fprintf('3/4 Sampling ground track every %.1f minutes...\n', dt_track_sec/60);
@@ -97,43 +97,93 @@ days_30 = (T_30 - t0)/const.day2sec;                     % days since detection
 %% 4. Visualization
 fprintf('4/4 Generating plots...\n');
 
-% Style helpers
-c_traj  = [0.85 0.33 0.10];
-c_earth = [0.00 0.45 0.74];
-c_moon  = [0.50 0.50 0.50];
+% --- Color palette (aligned with prelim plots) ---
+c_traj       = [0.90 0.40 0.10];   % SC trajectory (warm orange)
+c_earth      = [0.00 0.45 0.74];   % Earth / Earth orbit (deep blue)
+c_moon       = [0.40 0.40 0.70];   % Moon orbit (slate blue)
+
+c_goldstone  = [0.89 0.10 0.11];   % Station 1
+c_canberra   = [0.23 0.49 0.77];   % Station 2
+c_madrid     = [0.20 0.63 0.17];   % Station 3
+c_antarctica = [0.60 0.31 0.64];   % Station 4
+
+c_start      = [0.00 0.60 0.60];   % Start of ground track (teal)
+c_LTM        = [0.80 0.00 0.00];   % LTM marker
+c_CA         = [0.70 0.20 0.70];   % CA marker
+
 mk_sty  = {'MarkerEdgeColor','k','HandleVisibility','off'};
 txt_sty = {'FontSize',9,'FontWeight','bold','Color','k', ...
            'BackgroundColor','w','EdgeColor','k','Margin',1, ...
            'VerticalAlignment','bottom','HorizontalAlignment','left'};
 
 %% FIG 1 – Heliocentric view
-setup_fig('Heliocentric View','Heliocentric Trajectory');
+setup_fig('Heliocentric View','Heliocentric Trajectory', ...
+          'X_{Sun-EMO} (km)','Y_{Sun-EMO} (km)');
+
+% Sun (to scale)
 rectangle('Position',[-696340 -696340 1.4e6 1.4e6], ...
           'Curvature',[1 1],'FaceColor',[1 0.8 0],'EdgeColor','none');
 plot(0,0,'o','Color',[1 0.5 0],'DisplayName','Sun');
-plot(r_E_Sun_EMO(:,1), r_E_Sun_EMO(:,2),'--','Color',c_earth,'DisplayName','Earth Orbit');
-plot(r_sc_sun(:,1),   r_sc_sun(:,2),  '-', 'Color',c_traj,'LineWidth',1.5,'DisplayName','SC Trajectory');
+
+% Earth orbit + spacecraft trajectory
+plot(r_E_Sun_EMO(:,1), r_E_Sun_EMO(:,2),'--', ...
+     'Color',c_earth,'DisplayName','Earth Orbit');
+plot(r_sc_sun(:,1),   r_sc_sun(:,2),  '-', ...
+     'Color',c_traj,'LineWidth',1.5,'DisplayName','SC Trajectory');
+
+% Heliocentric LTM & CA
+plot(r_sc_sun(ltm_idx,1), r_sc_sun(ltm_idx,2), '^', ...
+     'MarkerFaceColor',c_LTM, ...
+     'MarkerEdgeColor','k', ...
+     'MarkerSize',8, ...
+     'DisplayName','LTM');
+
+plot(r_sc_sun(idx_ca,1),  r_sc_sun(idx_ca,2),  'p', ...
+     'MarkerFaceColor',c_CA, ...
+     'MarkerEdgeColor',[0.3 0 0.3], ...
+     'MarkerSize',10, ...
+     'DisplayName','CA');
+
 legend('Location','northeast');
 
 %% FIG 2 – Geocentric + lunar flyby
-setup_fig('Geocentric View','Geocentric View & Lunar Flyby');
+setup_fig('Geocentric View','Geocentric View & Lunar Flyby', ...
+          'X_{Earth-EMO} (km)','Y_{Earth-EMO} (km)');
+
+% Earth to scale
 rectangle('Position',[-const.R_E -const.R_E 2*const.R_E 2*const.R_E], ...
           'Curvature',[1 1],'FaceColor',c_earth,'EdgeColor','none');
-plot(NaN,NaN,'o','MarkerFaceColor',c_earth,'Color','none','DisplayName','Earth');
-plot(r_moon_EMO(:,1), r_moon_EMO(:,2),':','Color',c_moon,'LineWidth',1,'DisplayName','Moon Orbit');
-plot(r_sc_earth(:,1),r_sc_earth(:,2),'-','Color',c_traj,'LineWidth',1.5,'DisplayName','SC Trajectory');
+plot(NaN,NaN,'o','MarkerFaceColor',c_earth,'Color','none', ...
+     'DisplayName','Earth');
 
-% LTM, Moon @ CA, SC @ CA
-plot(r_sc_earth(ltm_idx,1), r_sc_earth(ltm_idx,2), '^', ...
-     'MarkerFaceColor','r','Color','k','MarkerSize',8,'DisplayName','LTM');
+% Moon orbit + spacecraft trajectory
+plot(r_moon_EMO(:,1), r_moon_EMO(:,2),':', ...
+     'Color',c_moon,'LineWidth',1,'DisplayName','Moon Orbit');
+plot(r_sc_earth(:,1), r_sc_earth(:,2),'-', ...
+     'Color',c_traj,'LineWidth',1.5,'DisplayName','SC Trajectory');
+
+% Moon @ CA, SC @ CA (geocentric)
 plot(r_moon_EMO(idx_ca,1),  r_moon_EMO(idx_ca,2),  'o', ...
-     'MarkerFaceColor',[0.7 0.7 0.7],'Color','k','DisplayName','Moon @ CA');
-plot(r_sc_earth(idx_ca,1),  r_sc_earth(idx_ca,2),  'p', ...
-     'MarkerFaceColor','m','Color','k','MarkerSize',12,'DisplayName','SC @ CA');
-plot([r_sc_earth(idx_ca,1) r_moon_EMO(idx_ca,1)], ...
-     [r_sc_earth(idx_ca,2) r_moon_EMO(idx_ca,2)], 'k-','LineWidth',0.5,'HandleVisibility','off');
+     'MarkerFaceColor',[0.8 0.8 0.8], ...
+     'MarkerEdgeColor','k', ...
+     'MarkerSize',7, ...
+     'DisplayName','Moon @ CA');
 
-xlim([-4.5e5 4.5e5]); ylim([-4.5e5 4.5e5]);
+plot(r_sc_earth(idx_ca,1),  r_sc_earth(idx_ca,2),  'p', ...
+     'MarkerFaceColor',c_CA, ...
+     'MarkerEdgeColor',[0.3 0 0.3], ...
+     'LineStyle','none', ...
+     'LineWidth',0.5, ...
+     'MarkerSize',7, ...
+     'DisplayName','SC @ CA');
+
+% Line from SC to Moon at CA
+plot([r_sc_earth(idx_ca,1) r_moon_EMO(idx_ca,1)], ...
+     [r_sc_earth(idx_ca,2) r_moon_EMO(idx_ca,2)], ...
+     'k-','LineWidth',0.5,'HandleVisibility','off');
+
+xlim([-4.5e5 4.5e5]);
+ylim([-4.5e5 4.5e5]);
 legend('Location','northeast');
 
 %% FIG 3 – Ground track (dt_track_sec samples)
@@ -143,7 +193,8 @@ ax = axes; hold on;
 % Map outline
 try
     load coastlines;
-    plot(coastlon, coastlat,'Color',[0.6 0.6 0.6],'LineWidth',0.5,'HandleVisibility','off');
+    plot(coastlon, coastlat,'Color',[0.6 0.6 0.6], ...
+         'LineWidth',0.5,'HandleVisibility','off');
 catch
 end
 
@@ -154,17 +205,18 @@ cmap_cust = [linspace(0,1,n_c)', zeros(n_c,1), linspace(1,0,n_c)'];
 % Ground-track points
 scatter(lons_30, lats_30, 1, days_30, 'filled', 'DisplayName','Ground Track');
 colormap(ax,cmap_cust);
-cb = colorbar; cb.Label.String = 'Days Since Detection';
+cb = colorbar; 
+cb.Label.String = 'Days Since Detection';
 
 % Stations + trajectory events
 markers = {
-    const.stations(1).lon, const.stations(1).lat, 's', 'r', 'Goldstone';
-    const.stations(2).lon, const.stations(2).lat, 'd', 'm', 'Canberra';
-    const.stations(3).lon, const.stations(3).lat, '^', 'g', 'Madrid';
-    const.stations(4).lon, const.stations(4).lat, 'p', 'k', 'Antarctica';
-    lons(1),        lats(1),        's', 'c', 'Start';
-    lons(ltm_idx),  lats(ltm_idx),  '^', 'r', 'LTM';
-    lons(idx_ca),   lats(idx_ca),   'p', 'm', 'CA'
+    const.stations(1).lon, const.stations(1).lat, 's', c_goldstone,  'Goldstone';
+    const.stations(2).lon, const.stations(2).lat, 'd', c_canberra,   'Canberra';
+    const.stations(3).lon, const.stations(3).lat, '^', c_madrid,     'Madrid';
+    const.stations(4).lon, const.stations(4).lat, 'p', c_antarctica, 'Antarctica';
+    lons(1),        lats(1),        's', c_start,  'Start';
+    lons(ltm_idx),  lats(ltm_idx),  '^', c_LTM,    'LTM';
+    lons(idx_ca),   lats(idx_ca),   'p', c_CA,     'CA';
 };
 
 for i = 1:size(markers,1)
@@ -175,13 +227,18 @@ for i = 1:size(markers,1)
         ln = markers{i,1};
         lt = markers{i,2};
     end
-    plot(ln, lt, markers{i,3}, 'MarkerFaceColor',markers{i,4}, 'MarkerSize',9, mk_sty{:});
+    plot(ln, lt, markers{i,3}, ...
+         'MarkerFaceColor',markers{i,4}, ...
+         'MarkerEdgeColor','k', ...
+         'MarkerSize',9, ...
+         mk_sty{:});
     text(ln+3, lt+2, markers{i,5}, txt_sty{:});
 end
 
 set(gca,'YDir','normal');
 xlim([-180 180]); ylim([-90 90]);
-xlabel('Longitude (deg)'); ylabel('Latitude (deg)');
+xlabel('Longitude (deg)');
+ylabel('Latitude (deg)');
 title(sprintf('Lunar Trailblazer Ground Track (%.1f min Samples)', dt_track_sec/60));
 grid on;
 
@@ -192,10 +249,10 @@ fprintf('Closest approach altitude: %.2f km\n', min_dist - 1737.4);
 fprintf('Closest approach UTC     : %s\n', utc_ca);
 
 %% Local helper: figure setup
-function setup_fig(name, title_str)
+function setup_fig(name, title_str, xlab, ylab)
     figure('Name',name,'Color','w','Position',[50 50 600 500]);
     hold on; grid on; axis equal; view(2);
     title(title_str,'Interpreter','none');
-    xlabel('X_{EMO} (km)','Interpreter','none');
-    ylabel('Y_{EMO} (km)','Interpreter','none');
+    xlabel(xlab,'Interpreter','tex');
+    ylabel(ylab,'Interpreter','tex');
 end

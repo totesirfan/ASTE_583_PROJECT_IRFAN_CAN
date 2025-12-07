@@ -82,8 +82,8 @@ end
 fprintf('Propagation complete. Beginning KF updates...\n\n');
 
 %% 6. Sequential CKF updates
-I  = eye(n_x);
-has_r = ~isnan(rng_km);
+I     = eye(n_x);
+has_r = ~isnan(rng_km);   % <- also saved later for plotting
 
 prefit_rr  = zeros(n_meas,1);
 postfit_rr = zeros(n_meas,1);
@@ -188,9 +188,17 @@ fprintf('lon_4 (deg):  %.6f\n', X0_KF(10)*C.rad2deg);
 kf_results = struct();
 kf_results.X0_KF      = X0_KF;
 kf_results.P0_KF      = P0_KF;
-kf_results.prefit_rr  = prefit_rr;
-kf_results.postfit_rr = postfit_rr;
-kf_results.time_days  = time_days;
+
+% Global residuals (all stations)
+kf_results.prefit_rr  = prefit_rr;          % km/s
+kf_results.postfit_rr = postfit_rr;         % km/s
+
+% Timing + station info for by-station plots later
+kf_results.time_days  = time_days;          % days since detection
+kf_results.t_sec      = t_sec;              % seconds since detection
+kf_results.t_et       = t_et_all;           % ET (s)
+kf_results.st_id      = st_id;              % station ID per measurement
+kf_results.has_range  = has_r;              % logical (range present)
 
 save('ASTE583_PrelimKalman_Results.mat','kf_results');
 fprintf('\nSaved to ASTE583_PrelimKalman_Results.mat\n');

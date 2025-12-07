@@ -64,10 +64,10 @@ function Phase3_ManeuverExecution()
     % 3: Madrid     -> green
     % 4: Antarctica -> black
     colors = [
-        1.0 0.0 0.0;   % Goldstone (red)
-        1.0 0.0 1.0;   % Canberra (magenta)
-        0.0 0.6 0.0;   % Madrid (green)
-        0.0 0.0 0.0    % Antarctica (black)
+        0.89 0.10 0.11;   % Goldstone (red)
+        0.23 0.49 0.77;   % Canberra (magenta)
+        0.20 0.63 0.17;   % Madrid (green)
+        0.60 0.31 0.64    % Antarctica (black)
     ];
 
     RR_no_all  = zeros(nT, nSt);   % km/s

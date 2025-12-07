@@ -27,6 +27,9 @@ fprintf('Prelim Batch OD: %d meas, 0–%.3f days.\n', n_meas, DCO_days);
 time_days = t_sec / C.day2sec;
 t_et_all  = t0_et + t_sec;
 
+% For later plotting / station-wise residuals
+has_range = ~isnan(rng_km);
+
 %% 3. A priori state & covariance (10-state)
 st4 = C.stations(4);
 
@@ -74,10 +77,10 @@ for iter = 1:max_iter
     Phi0   = eye(n_state);
     X_aug0 = [X0_full; Phi0(:)];      % 10 + 100 = 110×1
 
-    is_t0   = abs(t_sec) < 1e-9;
-    t_pos   = t_sec(~is_t0);
+    is_t0    = abs(t_sec) < 1e-9;
+    t_pos    = t_sec(~is_t0);
     t_et_pos = t0_et + t_pos;
-    t_et_u  = unique(t_et_pos);
+    t_et_u   = unique(t_et_pos);
 
     X_prop = [];
     if ~isempty(t_et_u)
@@ -181,7 +184,7 @@ for iter = 1:max_iter
         warning('Delta not PD; using inv(Delta).');
         P_post = inv(Delta); %#ok<MINV>
     else
-        Li    = L \ eye(size(L));
+        Li     = L \ eye(size(L));
         P_post = Li' * Li;
     end
 
@@ -212,16 +215,6 @@ for iter = 1:max_iter
     fprintf('  RR RMS pre/post: %.3e / %.3e km/s (%.2f / %.2f mm/s)\n', ...
         rr_pre_rms, rr_post_rms, rr_pre_rms*1e6, rr_post_rms*1e6);
 
-    % Optional quick plot (kept simple)
-    figure('Name', sprintf('Prelim Batch – Iter %d', iter), 'Color', 'w');
-    plot(time_days, prefit_rr*1e6, '.', time_days, postfit_rr*1e6, '.');
-    grid on;
-    xlabel('Time since detection (days)');
-    ylabel('Range-rate residual (mm/s)');  % avoid TeX \rho
-    title(sprintf('Iteration %d: RR residuals', iter));
-    legend('Prefit','Postfit','Location','best');
-    drawnow;
-
     % 6.6 Convergence
     if d_norm < tol_update
         fprintf('  Converged after %d iterations.\n', iter);
@@ -243,12 +236,19 @@ fprintf('lon_4 (deg):  %.6f\n', X0_est_final(10)*C.rad2deg);
 
 %% 7. Save
 prelim_results = struct();
-prelim_results.X0_prior         = X0_prior;
-prelim_results.P0_prior         = P0_est;
-prelim_results.X0_batch         = X0_est_final;
-prelim_results.P0_batch         = P0_post_final;
-prelim_results.const            = C;
+prelim_results.X0_prior          = X0_prior;
+prelim_results.P0_prior          = P0_est;
+prelim_results.X0_batch          = X0_est_final;
+prelim_results.P0_batch          = P0_post_final;
+prelim_results.const             = C;
 prelim_results.iteration_results = results;
+
+% Measurement / indexing info for by-station plots
+prelim_results.time_days = time_days;   % days since detection
+prelim_results.t_sec     = t_sec;       % seconds since detection
+prelim_results.t_et      = t_et_all;    % ET (s)
+prelim_results.st_id     = st_id;       % station ID per measurement
+prelim_results.has_range = has_range;   % logical (range present)
 
 save('ASTE583_PrelimBatch_Results.mat', 'prelim_results', 'meas_full');
 fprintf('\nSaved prelim batch to ASTE583_PrelimBatch_Results.mat\n');

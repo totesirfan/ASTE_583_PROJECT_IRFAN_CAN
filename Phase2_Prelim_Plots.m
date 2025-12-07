@@ -1,7 +1,7 @@
 function Phase2_Prelim_Plots()
 % PHASE2_PRELIM_PLOTS
 % Prelim OD (0–6 d):
-%   - Prefit/postfit RR residuals (Batch & Kalman)
+%   - Prefit/postfit RR residuals (Batch & Kalman) with station labels/colors
 %   - 3σ RTN covariance ellipses (Batch vs Kalman)
 
     clc; close all;
@@ -16,7 +16,7 @@ function Phase2_Prelim_Plots()
     idx  = meas.time_sec <= 6*C.day2sec;
 
     t_sec = meas.time_sec(idx);          % s since detection
-    st_id = meas.station_id(idx);
+    st_id = meas.station_id(idx);        % station ID
     rr    = meas.rr_kmps(idx);           % km/s
 
     [t_sec, I] = sort(t_sec);
@@ -96,36 +96,92 @@ function Phase2_Prelim_Plots()
         rr_post_k(i) = rr(i) - Y_k(2);
     end
 
-    %% 5. Plot helper (RR in mm/s) with fixed axes
-    function plot_rr(fig_name, t, pre, post)
+    %% 5. Plot helper (RR in mm/s) with fixed station colors + solid markers
+    function [col, mk, label] = station_style(sid)
+        % Default
+        col   = [0 0 1];
+        mk    = 'o';
+        if sid >= 1 && sid <= numel(C.stations) && isfield(C.stations,'name')
+            label = sprintf('St %d – %s', sid, C.stations(sid).name);
+        else
+            label = sprintf('St %d', sid);
+        end
+
+        switch sid
+            case 1  % Goldstone - red
+                col = [0.89 0.10 0.11];
+                mk  = 's';
+            case 2  % Canberra - blue
+                col = [0.23 0.49 0.77];
+                mk  = 'd';
+            case 3  % Madrid - green
+                col = [0.20 0.63 0.17];
+                mk  = '^';
+            case 4  % Antarctica - purple
+                col = [0.60 0.31 0.64];
+                mk  = 'p';
+        end
+    end
+
+    function plot_rr(fig_name, t, pre, post, st)
         rr_pre_mm  = 1e6 * pre;    % km/s -> mm/s
         rr_post_mm = 1e6 * post;
 
         figure('Name',fig_name, 'Color','w', 'Position',[50 100 1000 400]);
 
-        % Prefit
+        st_unique = unique(st(:).');
+
+        % ---- Prefit subplot ----
         subplot(1,2,1); hold on; grid on;
-        scatter(t, rr_pre_mm, 4, 'filled');
-        yline(0,'k:');
+
+        for j = 1:numel(st_unique)
+            sid   = st_unique(j);
+            idx_s = (st == sid);
+
+            [col, mk, label] = station_style(sid);
+
+            scatter(t(idx_s), rr_pre_mm(idx_s), 6, ...
+                col, ...
+                'filled', ...
+                'Marker', mk, ...
+                'DisplayName', label);
+        end
+
+        yline(0,'k:','HandleVisibility','off');
         xlabel('Time since detection (days)');
         ylabel('Prefit range-rate residual (mm/s)');
         title([fig_name ' - prefit']);
         xlim([0 max(t)]);
-        ylim([4500 6500]);   % <-- your preferred prefit scale
+        ylim([4500 6500]);   % your existing prefit scale
+        legend('Location','best');
 
-        % Postfit
+        % ---- Postfit subplot ----
         subplot(1,2,2); hold on; grid on;
-        scatter(t, rr_post_mm, 4, 'filled');
-        yline(0,'k:');
+
+        for j = 1:numel(st_unique)
+            sid   = st_unique(j);
+            idx_s = (st == sid);
+
+            [col, mk] = station_style(sid);
+
+            scatter(t(idx_s), rr_post_mm(idx_s), 6, ...
+                col, ...
+                'filled', ...
+                'Marker', mk, ...
+                'HandleVisibility','off');   % avoid duplicate legend
+        end
+
+        yline(0,'k:','HandleVisibility','off');
         xlabel('Time since detection (days)');
         ylabel('Postfit range-rate residual (mm/s)');
         title([fig_name ' - postfit']);
         xlim([0 max(t)]);
-        ylim([-6 4]);        % <-- your preferred postfit scale (mm/s)
+        ylim([-6 4]);        % your existing postfit scale (mm/s)
     end
 
-    plot_rr('Prelim Batch RR',  t_day, rr_pre_b, rr_post_b);
-    plot_rr('Prelim Kalman RR', t_day, rr_pre_k, rr_post_k);
+    % Use station IDs in the RR plots
+    plot_rr('Prelim Batch RR',  t_day, rr_pre_b, rr_post_b, st_id);
+    plot_rr('Prelim Kalman RR', t_day, rr_pre_k, rr_post_k, st_id);
 
     %% 6. RTN 3σ covariance ellipses (position block only)
     fprintf('Computing RTN 3σ ellipses at t0...\n');
@@ -136,12 +192,12 @@ function Phase2_Prelim_Plots()
     Pxyz_k = Pk0(1:3,1:3);
 
     % RTN transform from inertial r,v (rows: R, T, N)
-    function T = TRTN(r, v)
+    function Tm = TRTN(r, v)
         rhat = r / norm(r);
         h    = cross(r, v);
         nhat = h / norm(h);
         that = cross(nhat, rhat);
-        T    = [rhat.'; that.'; nhat.'];
+        Tm   = [rhat.'; that.'; nhat.'];
     end
 
     T      = TRTN(rB, vB);
