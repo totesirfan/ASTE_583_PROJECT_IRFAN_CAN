@@ -36,8 +36,8 @@ totesirfan-aste_583_project_irfan_can/
 ├── Phase2_Prelim_Passthru.m           # Phase 2: Passthru test (6-14d)
 ├── Phase2_Final_Kalman.m              # Phase 2: Final Iterated CKF
 ├── Phase2_FinalKalman_PostProcess.m   # Phase 2: Final Residuals & RTN
-├── Phase3_CleanupStats.m              # Phase 3: Monte Carlo Statistics
-└── Phase3_ManeuverExecution.m         # Phase 3: Maneuver RR Signature
+├── Phase3_ManeuverExecution.m         # Phase 3: Maneuver RR Signature
+└── Phase3_CleanupStats.m              # Phase 3: Monte Carlo Statistics
 ```
 
 ---
