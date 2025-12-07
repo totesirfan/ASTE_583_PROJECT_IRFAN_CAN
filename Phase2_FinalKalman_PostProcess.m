@@ -1,69 +1,51 @@
 function Phase2_FinalKalman_PostProcess()
-% Phase2_FinalKalman_PostProcess.m
-% Post-processing for FINAL Kalman OD:
-%   1) Plot converged prefit/postfit residuals (range & range rate)
-%   2) Propagate covariance to LTM and compute RTN sigmas
+% Post-process FINAL CKF:
+%  1) Plot pre/post range & range-rate residuals
+%  2) Propagate covariance to LTM and compute RTN sigmas
 
     clear; clc; close all;
-    fprintf('=== PHASE 2: FINAL KALMAN POST-PROCESSING (Residuals + LTM Covariance) ===\n');
+    fprintf('=== FINAL KALMAN POST-PROCESS (Residuals + LTM RTN Covariance) ===\n');
 
-    %% 1. Setup & load constants
-    try
-        init_project();
-    catch
-    end
-    const  = lib_constants();
-    t0_et  = const.t_detect_et;
+    % 1. Setup
+    try, init_project(); catch, end
+    const = lib_constants();
+    t0_et = const.t_detect_et;
 
-    %% 2. Load FINAL Kalman results
+    % 2. Load FINAL CKF file
     fname = 'ASTE583_FinalKalman_Results.mat';
     if ~isfile(fname)
         error('File %s not found. Run Phase2_Final_Kalman first.', fname);
     end
-
     S = load(fname);
 
-    requiredFields = {'X0_final_kalman','P0_final_kalman', ...
-                      't_et_all','st_id','has_range', ...
-                      'rho_prefit','rho_postfit', ...
-                      'rr_prefit','rr_postfit'};
-    for f = requiredFields
-        if ~isfield(S, f{1})
-            error('Field "%s" missing from %s. Re-run Phase2_Final_Kalman.', f{1}, fname);
-        end
-    end
+    % Expect fields saved by Phase2_Final_Kalman
+    X0_final_kalman = S.X0_final_kalman(:);   % 10x1
+    P0_final_kalman = S.P0_final_kalman;      % 10x10
+    t_et_all  = S.t_et(:);                    % Nx1 ET times
+    st_id     = S.st_id(:);                   % Nx1 station ids
+    has_range = logical(S.has_range(:));      % Nx1
 
-    X0_final_kalman = S.X0_final_kalman(:);    % 10x1
-    P0_final_kalman = S.P0_final_kalman;       % 10x10
-    t_et_all  = S.t_et_all(:);                 % Nx1 ET times
-    st_id     = S.st_id(:);                    % Nx1 station ids
-    has_range = S.has_range(:) ~= 0;           % logical
-
-    rho_prefit  = S.rho_prefit(:);            % Nx1 (km)
-    rho_postfit = S.rho_postfit(:);           % Nx1 (km)
-    rr_prefit   = S.rr_prefit(:);             % Nx1 (km/s)
-    rr_postfit  = S.rr_postfit(:);            % Nx1 (km/s)
+    rho_prefit  = S.rho_prefit(:);            % km
+    rho_postfit = S.rho_postfit(:);           % km
+    rr_prefit   = S.rr_prefit(:);             % km/s
+    rr_postfit  = S.rr_postfit(:);            % km/s
 
     n_meas = numel(t_et_all);
-
-    % Time in days from detection epoch
     t_days = (t_et_all - t0_et) * const.sec2day;
 
-    fprintf('Loaded FINAL Kalman solution: %d measurements spanning %.3f days.\n', ...
-             n_meas, max(t_days));
+    fprintf('Loaded FINAL CKF: %d measurements, span %.3f days.\n', ...
+            n_meas, max(t_days));
 
-    %% 3. Plot converged MMR range-rate residuals (prefit & postfit)
+    %% 3. Range-rate residuals (mm/s), per station
 
-    fprintf('Plotting converged range-rate prefits/postfits...\n');
-
+    fprintf('Plotting range-rate residuals...\n');
     figure('Name','FINAL Kalman RR Residuals','Color','w','Position',[100 100 1000 600]);
 
-    % Colours by station
-    colors = lines(4);
-    station_ids = 1:4;
+    colors        = lines(4);
+    station_ids   = 1:4;
     station_names = {const.stations.name};
 
-    % --- Prefit RR ---
+    % Prefit
     subplot(2,1,1); hold on; grid on;
     for i = 1:numel(station_ids)
         sid = station_ids(i);
@@ -79,7 +61,7 @@ function Phase2_FinalKalman_PostProcess()
     title('FINAL Kalman: Range-Rate Prefit Residuals');
     legend(station_names{:}, 'Location','bestoutside');
 
-    % --- Postfit RR ---
+    % Postfit
     subplot(2,1,2); hold on; grid on;
     for i = 1:numel(station_ids)
         sid = station_ids(i);
@@ -94,15 +76,14 @@ function Phase2_FinalKalman_PostProcess()
     ylabel('RR Postfit (mm/s)');
     title('FINAL Kalman: Range-Rate Postfit Residuals');
 
-    %% 4. Plot converged range residuals (only where range is present)
+    %% 4. Range residuals (km), only where range exists
 
-    fprintf('Plotting converged range prefits/postfits...\n');
-
+    fprintf('Plotting range residuals...\n');
     hasR = has_range & ~isnan(rho_prefit);
 
     figure('Name','FINAL Kalman Range Residuals','Color','w','Position',[150 150 1000 600]);
 
-    % --- Prefit Range ---
+    % Prefit
     subplot(2,1,1); hold on; grid on;
     for i = 1:numel(station_ids)
         sid = station_ids(i);
@@ -118,7 +99,7 @@ function Phase2_FinalKalman_PostProcess()
     title('FINAL Kalman: Range Prefit Residuals');
     legend(station_names{:}, 'Location','bestoutside');
 
-    % --- Postfit Range ---
+    % Postfit
     subplot(2,1,2); hold on; grid on;
     for i = 1:numel(station_ids)
         sid = station_ids(i);
@@ -133,35 +114,26 @@ function Phase2_FinalKalman_PostProcess()
     ylabel('Range Postfit (km)');
     title('FINAL Kalman: Range Postfit Residuals');
 
-    %% 5. Propagate covariance to LTM and compute RTN sigmas
+    %% 5. Covariance propagation to LTM and RTN sigmas
 
-    fprintf('Propagating FINAL Kalman covariance to LTM and computing RTN sigmas...\n');
+    fprintf('Propagating covariance to LTM and computing RTN sigmas...\n');
 
-    % LTM epoch (ET)
     t_LTM_et = cspice_str2et(const.LTM.date_utc);
+    n_state  = 10;
+    Phi0     = eye(n_state);
+    Z0       = [X0_final_kalman(:); Phi0(:)];
 
-    n_state = 10;
-    Phi0 = eye(n_state);
-    Z0   = [X0_final_kalman(:); Phi0(:)];
+    opt_ode = odeset('RelTol',1e-10,'AbsTol',1e-9);
+    [~, Z_prop] = ode45(@(t,Z) lib_dynamics(t,Z,const), ...
+                        [t0_et, t_LTM_et], Z0, opt_ode);
 
-    options_ode = odeset('RelTol',1e-10,'AbsTol',1e-9);
+    Z_LTM   = Z_prop(end,:).';
+    X_LTM   = Z_LTM(1:n_state);
+    Phi_LTM = reshape(Z_LTM(n_state+1:end), n_state, n_state);
 
-    [T_prop, Z_prop] = ode45(@(t,Z) lib_dynamics(t, Z, const), ...
-                             [t0_et, t_LTM_et], Z0, options_ode);
+    P_LTM = Phi_LTM * P0_final_kalman * Phi_LTM.';   % 10x10
+    P_LTM_state = P_LTM(1:6,1:6);                    % r,v block
 
-    Z_LTM = Z_prop(end,:).';
-    X_LTM = Z_LTM(1:n_state);
-    Phi_flat = Z_LTM(n_state+1:end);
-    Phi_LTM  = reshape(Phi_flat, n_state, n_state);
-
-    % Propagate covariance: P(LTM) = Phi * P0 * Phi^T
-    P0 = P0_final_kalman;
-    P_LTM = Phi_LTM * P0 * Phi_LTM.';
-
-    % Extract 6x6 position/velocity block
-    P_LTM_state = P_LTM(1:6,1:6);
-
-    % Build RTN frame at LTM (EMO2000)
     r = X_LTM(1:3);
     v = X_LTM(4:6);
 
@@ -170,11 +142,9 @@ function Phase2_FinalKalman_PostProcess()
     n_hat = h / norm(h);
     t_hat = cross(n_hat, r_hat);
 
-    C_RTN_I = [r_hat.'; t_hat.'; n_hat.'];      % rows: R, T, N in inertial coords
-    R6 = blkdiag(C_RTN_I, C_RTN_I);
-
-    % Covariance in RTN
-    P_RTN = R6 * P_LTM_state * R6.';
+    C_RTN_I = [r_hat.'; t_hat.'; n_hat.'];          % rows: R,T,N
+    R6      = blkdiag(C_RTN_I, C_RTN_I);
+    P_RTN   = R6 * P_LTM_state * R6.';
 
     sigma_R = sqrt(P_RTN(1,1));
     sigma_T = sqrt(P_RTN(2,2));
@@ -185,6 +155,5 @@ function Phase2_FinalKalman_PostProcess()
     fprintf('Sigma_T (along-track) : %.3f km (3σ = %.3f km)\n', sigma_T, 3*sigma_T);
     fprintf('Sigma_N (cross-track) : %.3f km (3σ = %.3f km)\n', sigma_N, 3*sigma_N);
     fprintf('LTM epoch: %s\n', const.LTM.date_utc);
-
-    fprintf('\nPost-processing complete. Use the RR/Range plots + sigma_T at LTM in your write-up.\n');
+    fprintf('\nDone. Use RR/Range residual plots + sigma_T at LTM in your write-up.\n');
 end
