@@ -1,8 +1,10 @@
 # ASTE 583 Project – Lunar Trailblazer Navigation
 
 **Repository:** `totesirfan-aste_583_project_irfan_can`  
-**Course:** ASTE 583 – Navigation & Estimation  
-**Group Members:** Irfan & Can
+**Course:** ASTE 583 – Space Navigation Principles and Practice
+**Group Members:**
+-Irfan 
+-Can
 
 This repository implements the full Orbit Determination (OD) and maneuver analysis pipeline for the **Lunar Trailblazer** class project. It adheres to the **official ASTE 583 lecture slides** and the **ASTE583_Project.pdf handout**.
 
