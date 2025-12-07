@@ -17,7 +17,7 @@ function init_project()
         'C:\Users\irfan\OneDrive\Documents\MATLAB\kernels\naif0012.tls.pc'
     };
     
-    fprintf('Loading Kernels...\n');
+    fprintf('Kernals Loaded\n');
     for i = 1:length(kernels)
         k = kernels{i};
         if isfile(k)

@@ -3,7 +3,7 @@
 % X0 = [r0(3); v0(3); k_SRP; rho_dot_bias; lat_4; lon_4]
 
 clear; clc; close all;
-
+tic
 %% 1. Setup
 init_project();
 C     = lib_constants();
@@ -252,3 +252,4 @@ prelim_results.iteration_results = results;
 
 save('ASTE583_PrelimBatch_Results.mat', 'prelim_results', 'meas_full');
 fprintf('\nSaved prelim batch to ASTE583_PrelimBatch_Results.mat\n');
+toc

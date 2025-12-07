@@ -1,124 +1,188 @@
 % Phase1_Main_RefTraj.m
-% MASTER SCRIPT: Reference Trajectory, LTM, Flyby, and Plots.
+% Master script: Reference trajectory, LTM, flyby, and plots (incl. 30-min ground track).
+
 clear; clc; close all;
 
-%% 1. Setup & Propagation
+%% 1. Setup & propagation
 init_project();
 const = lib_constants();
 
-% Times & Options
-t0    = cspice_str2et(const.epoch_utc_str);
-t_LTM = cspice_str2et(const.LTM.date_utc);
-tf    = t0 + (251 * const.day2sec);
-opts  = odeset('RelTol', 1e-12, 'AbsTol', 1e-12);
+% Times & ODE options
+t0    = cspice_str2et(const.epoch_utc_str);   % detection epoch (ET)
+t_LTM = cspice_str2et(const.LTM.date_utc);    % LTM epoch (ET)
+tf    = t0 + 251*const.day2sec;               % final time (ET)
+opts  = odeset('RelTol',1e-12,'AbsTol',1e-12);
 
 fprintf('1/4 Propagating (Detection -> LTM -> Flyby)...\n');
-% Segment 1: Detection -> LTM
-[T1, X1] = ode45(@(t,x) lib_dynamics(t, x, const), [t0 t_LTM], [const.X0_ref; 1; 0], opts);
 
-% Apply LTM
-X_LTM = X1(end, :)';
-X_LTM(4:6) = X_LTM(4:6) + const.LTM.dV;
-fprintf('    * LTM Delta-V Applied: [%.4f, %.4f, %.4f] km/s\n', const.LTM.dV);
+% Segment 1: detection -> LTM (state: [r; v; k_SRP; bias])
+X0_ref = [const.X0_ref; 1; 0];
+[T1, X1] = ode45(@(t,x) lib_dynamics(t,x,const), [t0 t_LTM], X0_ref, opts);
 
-% Segment 2: LTM -> Flyby
-[T2, X2] = ode45(@(t,x) lib_dynamics(t, x, const), [t_LTM tf], X_LTM, opts);
-T_vec = [T1; T2]; X_sc_sun = [X1; X2];
+% Apply LTM dV at LTM epoch
+X_LTM = X1(end,:)';
+X_LTM(4:6) = X_LTM(4:6) + const.LTM.dV(:);
+fprintf('    * LTM ΔV applied: [%.4f, %.4f, %.4f] km/s\n', const.LTM.dV);
 
-%% 3. Coordinate Transformations (Vectorized)
-fprintf('3/4 Processing Coordinates...\n');
+% Segment 2: LTM -> flyby
+[T2, X2] = ode45(@(t,x) lib_dynamics(t,x,const), [t_LTM tf], X_LTM, opts);
 
-% Ephemeris (Vectorized) - Note the T_vec' transpose correction
+% Concatenate time & state history (Sun-centered EMO2000)
+T_vec     = [T1; T2];              % ET times
+X_sc_sun  = [X1; X2];              % [r_sc_sun; v_sc_sun; params]
+ltm_idx   = numel(T1);             % index of LTM in concatenated arrays
+
+%% 2. Coordinate transformations (Earth/Moon, ground track)
+fprintf('2/4 Processing coordinates...\n');
+
+% Ephemeris: Earth wrt Sun (J2000, then EMO) & Moon wrt Earth (J2000->EMO)
 st_earth = cspice_spkezr('EARTH', T_vec', 'J2000', 'NONE', 'SUN');
 st_moon  = cspice_spkezr('MOON',  T_vec', 'J2000', 'NONE', 'EARTH');
-r_E_Sun_EMO = (const.R_EME_EMO * st_earth(1:3,:))'; 
-r_moon_EMO  = (const.R_EME_EMO * st_moon(1:3,:))';
 
-% Relative Vectors
-r_sc_earth = X_sc_sun(:, 1:3) - r_E_Sun_EMO;
+r_E_Sun_EMO = (const.R_EME_EMO * st_earth(1:3,:)).';   % km, EMO frame
+r_moon_EMO  = (const.R_EME_EMO * st_moon(1:3,:)).';    % km, EMO frame
 
-% Ground Track (ECF Rotation)
-r_sc_eci = (const.R_EME_EMO' * r_sc_earth')'; 
-phi_G = const.phi_G_detect + const.we * (T_vec - const.t_detect_et);
+% SC relative to Earth in EMO
+r_sc_sun   = X_sc_sun(:,1:3);
+r_sc_earth = r_sc_sun - r_E_Sun_EMO;
+
+% Ground track: EMO -> ECI -> ECF -> lat/lon
+r_sc_eci = (const.R_EME_EMO' * r_sc_earth.').';        % EMO->ECI
+
+phi_G = const.phi_G_detect + const.we*(T_vec - const.t_detect_et);  % GMST angle
 c = cos(phi_G); s = sin(phi_G);
-r_sc_ecf_x =  c .* r_sc_eci(:,1) + s .* r_sc_eci(:,2);
-r_sc_ecf_y = -s .* r_sc_eci(:,1) + c .* r_sc_eci(:,2);
-[lons, lats, ~] = cart2sph(r_sc_ecf_x, r_sc_ecf_y, r_sc_eci(:,3));
-lats = lats * const.rad2deg; lons = lons * const.rad2deg;
 
-% Stats
-[min_dist, idx_ca] = min(sqrt(sum((r_sc_earth - r_moon_EMO).^2, 2)));
-utc_ca = cspice_et2utc(T_vec(idx_ca), 'C', 3);
-ltm_idx = length(T1);
+% Rotate ECI -> ECF (about z-axis)
+r_ecf_x =  c.*r_sc_eci(:,1) + s.*r_sc_eci(:,2);
+r_ecf_y = -s.*r_sc_eci(:,1) + c.*r_sc_eci(:,2);
+r_ecf_z =  r_sc_eci(:,3);
+
+[lons, lats, ~] = cart2sph(r_ecf_x, r_ecf_y, r_ecf_z);
+lons = lons*const.rad2deg;
+lats = lats*const.rad2deg;
+
+% Moon closest approach (geocentric)
+d_vec    = r_sc_earth - r_moon_EMO;
+dist     = sqrt(sum(d_vec.^2,2));
+[min_dist, idx_ca] = min(dist);
+utc_ca   = cspice_et2utc(T_vec(idx_ca), 'C', 3);
+
+%% 3. 30-min ground-track sampling (fix interp1 duplicates)
+fprintf('3/4 Sampling ground track every 30 minutes...\n');
+
+dt_30  = 1800;   % seconds
+[T_unique, ia] = unique(T_vec,'stable');   % enforce unique sample points
+
+lons_u = lons(ia);
+lats_u = lats(ia);
+
+T_30    = (T_unique(1):dt_30:T_unique(end)).';           % ET grid every 30 min
+lons_30 = interp1(T_unique, lons_u, T_30, 'linear');     % deg
+lats_30 = interp1(T_unique, lats_u, T_30, 'linear');     % deg
+days_30 = (T_30 - t0)/const.day2sec;                     % days since detection
 
 %% 4. Visualization
-fprintf('4/4 Generating Plots...\n');
+fprintf('4/4 Generating plots...\n');
 
-% --- Styles ---
-c_traj = [0.85, 0.33, 0.10]; c_earth = [0, 0.45, 0.74]; c_moon = [0.5, 0.5, 0.5];
-mk_sty = {'MarkerEdgeColor','k', 'HandleVisibility','off'};
-txt_sty = {'FontSize',9,'FontWeight','bold','Color','k','BackgroundColor','w','EdgeColor','k','Margin',1,'VerticalAlignment','bottom','HorizontalAlignment','left'};
+% Style helpers
+c_traj  = [0.85 0.33 0.10];
+c_earth = [0.00 0.45 0.74];
+c_moon  = [0.50 0.50 0.50];
+mk_sty  = {'MarkerEdgeColor','k','HandleVisibility','off'};
+txt_sty = {'FontSize',9,'FontWeight','bold','Color','k', ...
+           'BackgroundColor','w','EdgeColor','k','Margin',1, ...
+           'VerticalAlignment','bottom','HorizontalAlignment','left'};
 
-% --- FIG 1: HELIOCENTRIC ---
-setup_fig('Heliocentric View', 'Heliocentric Trajectory');
-rectangle('Position',[-696340,-696340,1.4e6,1.4e6],'Curvature',[1 1],'FaceColor',[1 0.8 0],'EdgeColor','none');
+%% FIG 1 – Heliocentric view
+setup_fig('Heliocentric View','Heliocentric Trajectory');
+rectangle('Position',[-696340 -696340 1.4e6 1.4e6], ...
+          'Curvature',[1 1],'FaceColor',[1 0.8 0],'EdgeColor','none');
 plot(0,0,'o','Color',[1 0.5 0],'DisplayName','Sun');
-plot(r_E_Sun_EMO(:,1), r_E_Sun_EMO(:,2), '--', 'Color', c_earth, 'DisplayName', 'Earth Orbit');
-plot(X_sc_sun(:,1), X_sc_sun(:,2), '-', 'Color', c_traj, 'LineWidth', 1.5, 'DisplayName', 'SC Trajectory');
+plot(r_E_Sun_EMO(:,1), r_E_Sun_EMO(:,2),'--','Color',c_earth,'DisplayName','Earth Orbit');
+plot(r_sc_sun(:,1),   r_sc_sun(:,2),  '-', 'Color',c_traj,'LineWidth',1.5,'DisplayName','SC Trajectory');
 legend('Location','northeast');
 
-% --- FIG 2: GEOCENTRIC ---
-setup_fig('Geocentric View', 'Geocentric View & Lunar Flyby');
-rectangle('Position',[-const.R_E,-const.R_E,2*const.R_E,2*const.R_E],'Curvature',[1 1],'FaceColor',c_earth,'EdgeColor','none');
-plot(NaN,NaN,'o','MarkerFaceColor',c_earth,'Color','none','DisplayName','Earth'); 
-plot(r_moon_EMO(:,1), r_moon_EMO(:,2), ':', 'Color', c_moon, 'LineWidth', 1, 'DisplayName', 'Moon Orbit');
-plot(r_sc_earth(:,1), r_sc_earth(:,2), '-', 'Color', c_traj, 'LineWidth', 1.5, 'DisplayName', 'SC Trajectory');
+%% FIG 2 – Geocentric + lunar flyby
+setup_fig('Geocentric View','Geocentric View & Lunar Flyby');
+rectangle('Position',[-const.R_E -const.R_E 2*const.R_E 2*const.R_E], ...
+          'Curvature',[1 1],'FaceColor',c_earth,'EdgeColor','none');
+plot(NaN,NaN,'o','MarkerFaceColor',c_earth,'Color','none','DisplayName','Earth');
+plot(r_moon_EMO(:,1), r_moon_EMO(:,2),':','Color',c_moon,'LineWidth',1,'DisplayName','Moon Orbit');
+plot(r_sc_earth(:,1),r_sc_earth(:,2),'-','Color',c_traj,'LineWidth',1.5,'DisplayName','SC Trajectory');
 
-% Markers (LTM, Moon@CA, SC@CA)
-plot(r_sc_earth(ltm_idx,1), r_sc_earth(ltm_idx,2), '^', 'MarkerFaceColor','r', 'Color','k', 'MarkerSize',8, 'DisplayName','LTM');
-plot(r_moon_EMO(idx_ca,1), r_moon_EMO(idx_ca,2), 'o', 'MarkerFaceColor',[0.7 0.7 0.7], 'Color','k', 'DisplayName','Moon @ CA');
-plot(r_sc_earth(idx_ca,1), r_sc_earth(idx_ca,2), 'p', 'MarkerFaceColor','m', 'Color','k', 'MarkerSize',12, 'DisplayName','SC @ CA');
-plot([r_sc_earth(idx_ca,1) r_moon_EMO(idx_ca,1)], [r_sc_earth(idx_ca,2) r_moon_EMO(idx_ca,2)], 'k-', 'LineWidth',0.5, 'HandleVisibility','off');
-xlim([-4.5e5, 4.5e5]); ylim([-4.5e5, 4.5e5]); legend('Location','northeast');
+% LTM, Moon @ CA, SC @ CA
+plot(r_sc_earth(ltm_idx,1), r_sc_earth(ltm_idx,2), '^', ...
+     'MarkerFaceColor','r','Color','k','MarkerSize',8,'DisplayName','LTM');
+plot(r_moon_EMO(idx_ca,1),  r_moon_EMO(idx_ca,2),  'o', ...
+     'MarkerFaceColor',[0.7 0.7 0.7],'Color','k','DisplayName','Moon @ CA');
+plot(r_sc_earth(idx_ca,1),  r_sc_earth(idx_ca,2),  'p', ...
+     'MarkerFaceColor','m','Color','k','MarkerSize',12,'DisplayName','SC @ CA');
+plot([r_sc_earth(idx_ca,1) r_moon_EMO(idx_ca,1)], ...
+     [r_sc_earth(idx_ca,2) r_moon_EMO(idx_ca,2)], 'k-','LineWidth',0.5,'HandleVisibility','off');
 
-% --- FIG 3: GROUND TRACK ---
-figure('Name','Ground Track','Color','w','Position',[100 100 1000 600]); ax=axes; hold on;
-try load coastlines; plot(coastlon, coastlat, 'k', 'Color', [0.6 0.6 0.6], 'LineWidth', 0.5, 'HandleVisibility','off'); catch; end
+xlim([-4.5e5 4.5e5]); ylim([-4.5e5 4.5e5]);
+legend('Location','northeast');
 
-% Trajectory (Blue->Purple->Red)
-n_c = 256; cmap_cust = [linspace(0,1,n_c)', zeros(n_c,1), linspace(1,0,n_c)'];
-scatter(lons, lats, 6, (T_vec-t0)/const.day2sec, 'filled', 'DisplayName', 'Ground Track');
-colormap(ax, cmap_cust); cb=colorbar; cb.Label.String='Days Since Detection';
+%% FIG 3 – Ground track (30-min samples)
+figure('Name','Ground Track','Color','w','Position',[100 100 1000 600]);
+ax = axes; hold on;
 
-% Markers Loop (Stations + Events)
-% Format: {Lon, Lat, Marker, Color, Label}
+% Map outline
+try
+    load coastlines;
+    plot(coastlon, coastlat,'Color',[0.6 0.6 0.6],'LineWidth',0.5,'HandleVisibility','off');
+catch
+end
+
+% Color map for time progression
+n_c = 256;
+cmap_cust = [linspace(0,1,n_c)', zeros(n_c,1), linspace(1,0,n_c)'];
+
+% 30-min ground-track points
+scatter(lons_30, lats_30, 1.5, days_30, 'filled', 'DisplayName','Ground Track (30 min)');
+colormap(ax,cmap_cust);
+cb = colorbar; cb.Label.String = 'Days Since Detection';
+
+% Stations + trajectory events
 markers = {
     const.stations(1).lon, const.stations(1).lat, 's', 'r', 'Goldstone';
     const.stations(2).lon, const.stations(2).lat, 'd', 'm', 'Canberra';
     const.stations(3).lon, const.stations(3).lat, '^', 'g', 'Madrid';
     const.stations(4).lon, const.stations(4).lat, 'p', 'k', 'Antarctica';
-    lons(1), lats(1), 's', 'c', 'Start';
-    lons(ltm_idx), lats(ltm_idx), '^', 'r', 'LTM';
-    lons(idx_ca), lats(idx_ca), 'p', 'm', 'CA'
+    lons(1),        lats(1),        's', 'c', 'Start';
+    lons(ltm_idx),  lats(ltm_idx),  '^', 'r', 'LTM';
+    lons(idx_ca),   lats(idx_ca),   'p', 'm', 'CA'
 };
 
-for i=1:size(markers,1)
-    % Convert Station Radians to Degrees if needed (Events are already degrees)
-    if i <= 4, ln = markers{i,1}*const.rad2deg; lt = markers{i,2}*const.rad2deg; else, ln = markers{i,1}; lt = markers{i,2}; end
-    plot(ln, lt, markers{i,3}, 'MarkerFaceColor', markers{i,4}, 'MarkerSize', 9, mk_sty{:});
+for i = 1:size(markers,1)
+    if i <= 4
+        ln = markers{i,1}*const.rad2deg;
+        lt = markers{i,2}*const.rad2deg;
+    else
+        ln = markers{i,1};
+        lt = markers{i,2};
+    end
+    plot(ln, lt, markers{i,3}, 'MarkerFaceColor',markers{i,4}, 'MarkerSize',9, mk_sty{:});
     text(ln+3, lt+2, markers{i,5}, txt_sty{:});
 end
 
-set(gca, 'YDir', 'normal'); xlim([-180 180]); ylim([-90 90]);
-xlabel('Longitude (deg)'); ylabel('Latitude (deg)'); title('Lunar Trailblazer Ground Track'); grid on;
+set(gca,'YDir','normal');
+xlim([-180 180]); ylim([-90 90]);
+xlabel('Longitude (deg)'); ylabel('Latitude (deg)');
+title('Lunar Trailblazer Ground Track (30-min Samples)');
+grid on;
 
-fprintf('\n--- STATS ---\nCA Dist: %.2f km\nAlt: %.2f km\nTime: %s\n', min_dist, min_dist-1737.4, utc_ca);
+%% Stats
+fprintf('\n--- STATS ---\n');
+fprintf('Closest approach distance: %.2f km\n', min_dist);
+fprintf('Closest approach altitude: %.2f km\n', min_dist - 1737.4);
+fprintf('Closest approach UTC     : %s\n', utc_ca);
 
-% --- Local Helper Function to Replace Anonymous Function ---
+%% Local helper: figure setup
 function setup_fig(name, title_str)
     figure('Name',name,'Color','w','Position',[50 50 600 500]);
     hold on; grid on; axis equal; view(2);
     title(title_str,'Interpreter','none');
-    xlabel('X EMO (km)','Interpreter','none'); 
-    ylabel('Y EMO (km)','Interpreter','none');
+    xlabel('X_{EMO} (km)','Interpreter','none');
+    ylabel('Y_{EMO} (km)','Interpreter','none');
 end

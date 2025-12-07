@@ -1,45 +1,36 @@
 function meas = load_project_measurements()
-% LOAD_PROJECT_MEASUREMENTS
-%   Load LTB radiometric data from the two project CSVs and return a
-%   unified measurement struct.
-%
-% Files (must be in the current folder or on the MATLAB path):
-%   - ASTE583_Project_LTB_Measurements_0-6D_Truth.csv
-%   - ASTE583_Project_LTB_Measurements_6D-14D_Truth.csv
-%
-% Output struct fields:
-%   meas.time_sec    : [N×1] time since detection epoch, seconds
-%   meas.station_id  : [N×1] station ID (1,2,3,4)
-%   meas.range_km    : [N×1] two-way range (km), NaN where not available
-%   meas.rr_kmps     : [N×1] two-way range-rate (km/s)
+% LOAD_PROJECT_MEASUREMENTS  Merge 0–6 d and 6–14 d LTB radiometric data.
 
-    file_0_6  = 'ASTE583_Project_LTB_Measurements_0-6D_Truth.csv';
-    file_6_14 = 'ASTE583_Project_LTB_Measurements_6D-14D_Truth.csv';
+    f0 = 'ASTE583_Project_LTB_Measurements_0-6D_Truth.csv';
+    f1 = 'ASTE583_Project_LTB_Measurements_6D-14D_Truth.csv';
 
-    % --- 0–6 days: Antarctica only, Doppler-only, col 3 is RR (km/s) ---
-    T0 = readtable(file_0_6,  'VariableNamingRule','preserve');
+    % 0–6 days: Antarctica Doppler only (RR in col 3)
+    T0 = readtable(f0,'VariableNamingRule','preserve');
+    t0  = T0{:,1};
+    st0 = T0{:,2};
+    rr0 = T0{:,3};
+    rng0 = nan(height(T0),1);        % no range in this span
 
-    t0   = T0{:,1};   % seconds from detection epoch
-    st0  = T0{:,2};   % station ID (should be 4)
-    rr0  = T0{:,3};   % actually range-rate [km/s]
-    rng0 = nan(size(rr0));  % no range in this file
+    % 6–14 days: DSN + Antarctica, range + RR
+    T1 = readtable(f1,'VariableNamingRule','preserve');
+    t1  = T1{:,1};
+    st1 = T1{:,2};
+    rng1 = T1{:,3};
+    rr1  = T1{:,4};
 
-    % --- 6–14 days: DSN + Antarctica, proper Range + Range-rate ---
-    T1  = readtable(file_6_14, 'VariableNamingRule','preserve');
+    % Stack and sort by time
+    t  = [t0;  t1];
+    st = [st0; st1];
+    rng = [rng0; rng1];
+    rr  = [rr0;  rr1];
 
-    t1   = T1{:,1};   % seconds from detection epoch
-    st1  = T1{:,2};   % station ID
-    rng1 = T1{:,3};   % range [km]
-    rr1  = T1{:,4};   % range-rate [km/s]
+    [t, idx] = sort(t);
+    st  = st(idx);
+    rng = rng(idx);
+    rr  = rr(idx);
 
-    % --- Combine into a single struct and sort by time ---
-    meas.time_sec   = [t0;  t1];
-    meas.station_id = [st0; st1];
-    meas.range_km   = [rng0; rng1];
-    meas.rr_kmps    = [rr0;  rr1];
-
-    [meas.time_sec, idx] = sort(meas.time_sec);
-    meas.station_id = meas.station_id(idx);
-    meas.range_km   = meas.range_km(idx);
-    meas.rr_kmps    = meas.rr_kmps(idx);
+    meas.time_sec   = t;
+    meas.station_id = st;
+    meas.range_km   = rng;
+    meas.rr_kmps    = rr;
 end
