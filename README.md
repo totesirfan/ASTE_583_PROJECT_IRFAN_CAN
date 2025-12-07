@@ -1,4 +1,4 @@
-# ASTE 583 Project – Lunar Trailblazer Navigation
+# USC ASTE 583 Project – Lunar Trailblazer Navigation
 
 **Repository:** `totesirfan-aste_583_project_irfan_can`  
 **Course:** ASTE 583 – Space Navigation Principles and Practice  
