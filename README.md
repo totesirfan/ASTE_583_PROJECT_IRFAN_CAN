@@ -121,8 +121,8 @@ Phase2_FinalKalman_PostProcess;
 
 **Phase 3: Maneuvers & Statistics**
 ```matlab
-Phase2_Cleanup_Statistics;            % Monte Carlo cleanup stats (defined in Phase3_CleanupStats.m)
-Phase3_LTM_ManeuverExecution_Final;   % LTM RR signature (defined in Phase3_ManeuverExecution.m)
+Phase3_ManeuverExecution;   % LTM RR signature (defined in Phase3_ManeuverExecution.m)
+Phase2_Cleanup_Stats;       % Monte Carlo cleanup stats (defined in Phase3_CleanupStats.m)
 ```
 
 ---
@@ -150,8 +150,8 @@ Phase3_LTM_ManeuverExecution_Final;   % LTM RR signature (defined in Phase3_Mane
 - **`Phase2_FinalKalman_PostProcess.m`**: Generates final residual plots (mm/s) and propagates covariance to LTM to compute RTN uncertainties.
 
 ### 5.5 Phase 3
-- **`Phase3_CleanupStats.m`**: Defines `Phase2_Cleanup_Statistics()`. Performs Monte Carlo analysis (default N=10,000) to estimate cleanup ΔV (LCM) and total ΔV budget compliance.
 - **`Phase3_ManeuverExecution.m`**: Defines `Phase3_LTM_ManeuverExecution_Final()`. Visualizes the LTM maneuver signature in range-rate for all ground stations.
+- **`Phase3_CleanupStats.m`**: Defines `Phase2_Cleanup_Statistics()`. Performs Monte Carlo analysis (default N=10,000) to estimate cleanup ΔV (LCM) and total ΔV budget compliance.
 
 ---
 
