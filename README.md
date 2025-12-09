@@ -16,6 +16,14 @@
   <em>Global ground track showing DSN station visibility and maneuver epochs.</em>
 </div>
 
+### Lunar Flyby Geometry 
+
+<div align="center">
+  <img src="img/lunar_flyby_geometry.png" width="100%">
+  <br>
+  <em>3D Moon–centered view of the lunar flyby near closest approach f.</em>
+</div>
+
 ---
 
 This repository implements the full Orbit Determination (OD) and maneuver analysis pipeline for the **Lunar Trailblazer** class project. It adheres strictly to:
