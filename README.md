@@ -21,7 +21,7 @@
 <div align="center">
   <img src="img/lunar_flyby_geometry.png" width="100%">
   <br>
-  <em>3D Moon–centered view of the lunar flyby near closest approach f.</em>
+  <em>3D Moon–centered view of the lunar flyby near closest approach (plot design adapted from Varsha Krishnakumar, used with permission).</em>
 </div>
 
 ---
