@@ -81,6 +81,8 @@ d_vec              = r_sc_earth - r_moon_EMO;
 dist               = sqrt(sum(d_vec.^2,2));
 [min_dist, idx_ca] = min(dist);
 utc_ca             = cspice_et2utc(T_vec(idx_ca), 'C', 3);
+dt_ca_days         = (T_vec(idx_ca) - t0)/const.day2sec;
+alt_ca             = min_dist - 1737.4;   % km above lunar mean radius
 
 %% 3. Ground-track sampling (using dt_track_sec)
 fprintf('3/4 Sampling ground track every %.1f minutes...\n', dt_track_sec/60);
@@ -242,10 +244,101 @@ ylabel('Latitude (deg)');
 title(sprintf('Lunar Trailblazer Ground Track (%.1f min Samples)', dt_track_sec/60));
 grid on;
 
+%% FIG 4 – 3D Moon flyby at closest approach (textured Moon)
+figure('Name','3D Moon Flyby at CA','Color','w','Position',[200 100 800 700]);
+hold on; grid on; axis equal; view(3);
+
+% Use Moon-centered coordinates at CA for clean local geometry
+rM_ca      = r_moon_EMO(idx_ca,:);      % Moon position at CA (Earth-EMO)
+r_moon_MC  = r_moon_EMO - rM_ca;        % Moon trajectory, Moon-centered
+r_sc_MC    = r_sc_earth - rM_ca;        % SC trajectory, Moon-centered
+sc_ca_MC   = r_sc_MC(idx_ca,:);         % SC at CA in Moon-centered frame
+
+% Subset near CA (e.g., where SC-Moon distance < 20 R_moon)
+R_moon = 1737.4;    % km
+if isfield(const,'R_Moon')
+    R_moon = const.R_Moon;
+end
+idx_win = dist < 20*R_moon;
+if ~any(idx_win)
+    idx_win = true(size(dist));   % fallback: plot all
+end
+
+% Plot Moon trajectory and spacecraft trajectory (near CA)
+plot3(r_moon_MC(idx_win,1), r_moon_MC(idx_win,2), r_moon_MC(idx_win,3), ...
+      '-','Color',c_moon,'LineWidth',1.2,'DisplayName','Moon Trajectory');
+plot3(r_sc_MC(idx_win,1),   r_sc_MC(idx_win,2),   r_sc_MC(idx_win,3), ...
+      '-','Color',c_traj,'LineWidth',1.5,'DisplayName','SC Trajectory');
+
+% Textured Moon model at origin of this frame
+[XS, YS, ZS] = sphere(256);
+XS = R_moon * XS;
+YS = R_moon * YS;
+ZS = R_moon * ZS;
+
+has_tex = false;
+try
+    moon_tex = imread('lroc_color_poles_2k.tif');
+    has_tex  = true;
+catch
+    warning('Moon texture file lroc_color_poles_2k.tif not found. Using gray sphere.');
+end
+
+if has_tex
+    surface(XS, YS, ZS, ...
+            'FaceColor','texturemap', ...
+            'CData',moon_tex, ...
+            'EdgeColor','none', ...
+            'HandleVisibility','off');
+else
+    surf(XS, YS, ZS, ...
+         'FaceColor',[0.8 0.8 0.8], ...
+         'EdgeColor','none', ...
+         'HandleVisibility','off');
+end
+
+shading interp;
+camlight headlight;
+lighting gouraud;
+
+% SC @ CA marker (smaller)
+plot3(sc_ca_MC(1), sc_ca_MC(2), sc_ca_MC(3), 'p', ...
+      'MarkerFaceColor',c_CA, ...
+      'MarkerEdgeColor',[0.3 0 0.3], ...
+      'MarkerSize',5, ...
+      'DisplayName','SC @ CA');
+
+% CA altitude annotation – close to SC, offset along radial direction
+r_hat = sc_ca_MC / norm(sc_ca_MC);
+text_pos = sc_ca_MC + 0.3*R_moon * r_hat;   % small radial offset
+text(text_pos(1), text_pos(2), text_pos(3), ...
+     sprintf('CA Altitude = %.1f km', alt_ca), ...
+     'FontSize',10, ...
+     'FontWeight','bold', ...
+     'HorizontalAlignment','center');
+
+% Zoom around the Moon (~±4000 km box)
+lim = 2500;   % km
+xlim([-lim lim]);
+ylim([-lim lim]);
+zlim([-lim lim]);
+
+xlabel('X_{Moon-EMO, CA} (km)','Interpreter','tex');
+ylabel('Y_{Moon-EMO, CA} (km)','Interpreter','tex');
+zlabel('Z_{Moon-EMO, CA} (km)','Interpreter','tex');
+
+title(sprintf(['Lunar Flyby Geometry at Closest Approach\n', ...
+               't = %.3f Days from t0, %s UTC'], ...
+               dt_ca_days, utc_ca), ...
+      'Interpreter','none');
+
+legend('Location','bestoutside');
+
+
 %% Stats
 fprintf('\n--- STATS ---\n');
 fprintf('Closest approach distance: %.2f km\n', min_dist);
-fprintf('Closest approach altitude: %.2f km\n', min_dist - 1737.4);
+fprintf('Closest approach altitude: %.2f km\n', alt_ca);
 fprintf('Closest approach UTC     : %s\n', utc_ca);
 
 %% Local helper: figure setup

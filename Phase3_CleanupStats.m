@@ -1,5 +1,5 @@
 function Phase3_CleanupStats()
-% PHASE2_CLEANUP_STATISTICS
+% PHASE3_CLEANUP_STATISTICS
 % Cleanup Maneuver Statistics (20 pts) using FINAL Kalman OD.
 %
 % Implements handout requirements:
@@ -13,10 +13,15 @@ function Phase3_CleanupStats()
 %    and total dV = |LTM| + |LCM|.
 %  - Compute DeltaV_99 (99th percentile of total dV) and compare to
 %    total dV requirement (const.dV_budget, in km/s).
+%
+% Additional diagnostics (added here):
+%  - Lunar flyby closest-approach sanity check using the FINAL OD
+%    reference and a subset of Monte Carlo trajectories with cleanup.
 
     clear; clc; close all;
     fprintf('=== Cleanup maneuver statistics using FINAL Kalman OD ===\n');
-tic
+    tic
+
     %% 1. Setup, constants, epochs
     try
         init_project();
@@ -43,37 +48,35 @@ tic
         error('ASTE583_FinalKalman_Results.mat must contain X0_final_kalman and P0_final_kalman.');
     end
 
-    X0_KF = Sfinal.X0_final_kalman(:);   % 10x1
-    P0_KF = Sfinal.P0_final_kalman;      % 10x10
+    X0_KF = Sfinal.X0_final_kalman(:);   % 10x1, FINAL OD mean at detection
+    P0_KF = Sfinal.P0_final_kalman;      % 10x10, FINAL OD covariance at detection
 
     if numel(X0_KF) ~= 10 || any(size(P0_KF) ~= 10)
         error('FINAL Kalman state must be 10x1 and covariance 10x10.');
     end
 
-    %% 3. Reference trajectory (Prime Nav reference + deterministic LTM)
-    stat4 = const.stations(4);
-    X_ref0 = [const.X0_ref;
-              const.k_SRP_0;
-              0.0;              % bias
-              stat4.lat;
-              stat4.lon];       % Antarctica "truth"
+    %% 3. Reference trajectory (FINAL OD mean + deterministic LTM)
+    % IMPORTANT CHANGE: use X0_KF as the reference initial state so that
+    % the reference trajectory uses the same k_SRP, Doppler bias, and
+    % Antarctica coordinates as the navigation solution.
+    X_ref0 = X0_KF;     % 10x1: [r; v; k_SRP; bias; phi4; lambda4]
 
-    % Detection -> LTM
+    % Detection -> LTM (reference)
     [~, Xref_seg1] = ode45(@(t,x) lib_dynamics(t,x,const), ...
                            [t0_et t_LTM], X_ref0, opts);
     X_ref_LTMm = Xref_seg1(end,:).';
 
-    % Apply deterministic LTM
+    % Apply deterministic LTM (impulsive)
     dV_LTM_nom = const.LTM.dV(:);        % km/s
     X_ref_LTMp = X_ref_LTMm;
     X_ref_LTMp(4:6) = X_ref_LTMp(4:6) + dV_LTM_nom;
 
-    % LTM -> LCM
+    % LTM -> LCM (reference)
     [~, Xref_seg2] = ode45(@(t,x) lib_dynamics(t,x,const), ...
                            [t_LTM t_LCM], X_ref_LTMp, opts);
     X_ref_LCM = Xref_seg2(end,:).';
 
-    % LCM -> target (no cleanup)
+    % LCM -> target (no cleanup, reference)
     [~, Xref_seg3] = ode45(@(t,x) lib_dynamics(t,x,const), ...
                            [t_LCM t_TGT], X_ref_LCM, opts);
     X_ref_TGT = Xref_seg3(end,:).';
@@ -113,12 +116,16 @@ tic
         end
     end
 
-    % Storage
+    % Storage for statistics
     pos_err_LCM = zeros(Nmc,1);   % km
     vel_err_LCM = zeros(Nmc,1);   % km/s
     dV_LTM_ms   = zeros(Nmc,1);   % m/s
     dV_LCM_ms   = zeros(Nmc,1);   % m/s
     dV_tot_ms   = zeros(Nmc,1);   % m/s
+
+    % Storage for later lunar-flyby check (store all, we can subsample)
+    LCM_state_store = zeros(10, Nmc);   % state at LCM (before cleanup)
+    dV_LCM_store    = zeros(3,  Nmc);   % cleanup DeltaV vector (km/s)
 
     fprintf('Running %d Monte Carlo samples...\n\n', Nmc);
 
@@ -136,11 +143,12 @@ tic
         X_LTMm = Xseg1(end,:).';
 
         % LTM execution error (spherical 1-sigma)
-        dir_vec = randn(3,1); dir_vec = dir_vec / norm(dir_vec);
-        mag_err = sigma_exec * randn();          % km/s
-        dV_err  = mag_err * dir_vec;
+        dir_vec = randn(3,1); 
+        dir_vec = dir_vec / norm(dir_vec);
+        mag_err = sigma_exec * randn();   % km/s
+        dV_err  = mag_err * dir_vec;      % km/s
 
-        dV_LTM_actual = dV_LTM_nom + dV_err;     % km/s
+        dV_LTM_actual = dV_LTM_nom + dV_err;    % km/s
 
         X_LTMp = X_LTMm;
         X_LTMp(4:6) = X_LTMp(4:6) + dV_LTM_actual;
@@ -157,7 +165,7 @@ tic
         pos_err_LCM(k) = norm(r_LCM - r_ref_LCM);   % km
         vel_err_LCM(k) = norm(v_LCM - v_ref_LCM);   % km/s
 
-        % LCM -> target without cleanup
+        % LCM -> target without cleanup (free drift)
         [~, Xseg3] = ode45(@(t,x) lib_dynamics(t,x,const), ...
                            [t_LCM t_TGT], X_LCM_samp, opts);
         X_TGT_free = Xseg3(end,:).';
@@ -167,9 +175,14 @@ tic
         dr_TGT     = r_TGT_free - r_ref_TGT;   % 3x1
         dV_LCM_vec = -S \ dr_TGT;              % km/s
 
+        % Store magnitudes for histograms
         dV_LCM_ms(k) = 1000*norm(dV_LCM_vec);      % m/s
         dV_LTM_ms(k) = 1000*norm(dV_LTM_actual);   % m/s
         dV_tot_ms(k) = dV_LTM_ms(k) + dV_LCM_ms(k);
+
+        % Store full vectors for later lunar-flyby check
+        LCM_state_store(:,k) = X_LCM_samp;
+        dV_LCM_store(:,k)    = dV_LCM_vec;
     end
 
     %% 7. Scalar statistics and requirement check
@@ -224,11 +237,76 @@ tic
     subplot(1,2,2); hold on; grid on;
     histogram(dV_tot_ms, 40);
     xline(dV_budget_ms,'r--','Budget','LineWidth',1.5);
+    xline(dV99,'k--','\DeltaV_{99}','LineWidth',1.5);
     xlabel('Total \DeltaV (LTM + LCM) (m/s)', 'Interpreter','tex');
     ylabel('Count');
     title('Total \DeltaV distribution','Interpreter','tex');
-    legend('Samples','Budget','Location','best');
+    legend('Samples','Budget','\DeltaV_{99}','Location','best');
 
-    fprintf('\nCleanup maneuver statistics plotting complete.\n');
+    %% 10. Lunar flyby closest-approach sanity check
+    % NOTE: This is *not* part of the handout requirements, but is a useful
+    % diagnostic to verify that the post-LCM + cleanup trajectories still
+    % produce a reasonable lunar flyby in the far future.
+    fprintf('\nPerforming lunar flyby closest-approach sanity check...\n');
+
+    % Choose a horizon long enough to cover the flyby (adjust as needed).
+    % Example: 200 days after LCM.
+    t_fly_end = t_LCM + 200*day;
+
+    % 10.1 Reference trajectory: from LTM (after nominal LTM) to t_fly_end
+    [T_ref_fly, X_ref_fly] = ode45(@(t,x) lib_dynamics(t,x,const), ...
+                                   [t_LTM t_fly_end], X_ref_LTMp, opts);
+
+    n_ref = numel(T_ref_fly);
+    dist_ref = zeros(n_ref,1);
+    for i = 1:n_ref
+        % Moon state in J2000, then rotate to EMO2000
+        [stateM, ~] = cspice_spkezr('MOON', T_ref_fly(i), ...
+                                    'J2000', 'NONE', 'SUN');
+        rM_EMO = const.R_EME_EMO * stateM(1:3);  % km, EMO2000
+        r_sc   = X_ref_fly(i,1:3).';
+        dist_ref(i) = norm(r_sc - rM_EMO);
+    end
+    [ca_ref, idx_ref] = min(dist_ref);
+    t_ca_ref = T_ref_fly(idx_ref);
+    utc_ca_ref = cspice_et2utc(t_ca_ref,'ISOC',3);
+
+    fprintf('Reference closest approach to Moon (LTM->+200 d): %.1f km at %s UTC\n', ...
+            ca_ref, utc_ca_ref);
+
+    % 10.2 Monte Carlo subset with cleanup applied at LCM
+    max_check = min(50, Nmc);  % check first 50 samples to keep runtime reasonable
+    ca_mc = zeros(max_check,1);
+
+    for k = 1:max_check
+        % State just before cleanup
+        X_LCM_pre = LCM_state_store(:,k);
+
+        % Apply cleanup DeltaV at LCM
+        X_LCM_post        = X_LCM_pre;
+        X_LCM_post(4:6)   = X_LCM_post(4:6) + dV_LCM_store(:,k);
+
+        % Propagate from LCM to t_fly_end with cleanup
+        [T_mc, X_mc] = ode45(@(t,x) lib_dynamics(t,x,const), ...
+                             [t_LCM t_fly_end], X_LCM_post, opts);
+
+        n_mc = numel(T_mc);
+        dist_mc_k = zeros(n_mc,1);
+        for i = 1:n_mc
+            [stateM, ~] = cspice_spkezr('MOON', T_mc(i), ...
+                                        'J2000', 'NONE', 'SUN');
+            rM_EMO = const.R_EME_EMO * stateM(1:3);
+            r_sc   = X_mc(i,1:3).';
+            dist_mc_k(i) = norm(r_sc - rM_EMO);
+        end
+        ca_mc(k) = min(dist_mc_k);
+    end
+
+    fprintf('MC mean closest approach (first %d samples): %.1f km\n', ...
+            max_check, mean(ca_mc));
+    fprintf('MC std  closest approach                 : %.1f km\n', ...
+            std(ca_mc));
+
+    fprintf('\nCleanup maneuver statistics and lunar-flyby check complete.\n');
     toc
 end
