@@ -31,7 +31,6 @@ This repository implements the full Orbit Determination (OD) and maneuver analys
 - **ASTE583_Project.pdf** (project handout)
 - ASTE 583 lecture slide decks (`Two-Body`, `STM`, `Covariance`, `Least Squares & Batch Filter`, `Sequential Kalman Filters`, `Measurements`, `Numerical Compensations`, `Orbital Perturbations`)
 
-All force models, measurement models, and covariance conventions are pulled directly from these slides.
 
 ---
 
